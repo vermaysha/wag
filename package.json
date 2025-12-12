@@ -11,7 +11,7 @@
 		"@types/qrcode-generator": "^1.0.6",
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
-		"shadcn": "^3.5.2"
+		"shadcn": "^3.6.0"
 	},
 	"peerDependencies": {
 		"typescript": "^5.9.2"
