@@ -59,7 +59,7 @@
     "@elysiajs/openapi": "^1.4.14",
     "baileys": "^7.0.0-rc.9",
     "croner": "^10.0.1",
-    "elysia": "^1.4.22",
+    "elysia": "^1.4.23",
     "jimp": "^1.6.0",
     "libphonenumber-js": "^1.12.36",
     "readeof": "^1.1.0",
