@@ -58,7 +58,7 @@
   "dependencies": {
     "@elysiajs/openapi": "^1.4.15",
     "@types/qs": "^6.15.1",
-    "audio-decode": "^3.11.0",
+    "audio-decode": "^3.11.2",
     "baileys": "^7.0.0-rc13",
     "croner": "^10.0.1",
     "elysia": "^1.4.29",
