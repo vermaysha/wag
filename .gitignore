@@ -42,3 +42,10 @@ session_data
 
 logs
 pm2.config.cjs
+
+# OS generated files
+Thumbs.db
+
+# mcp
+mcp-logs.txt
+wa-logs.txt

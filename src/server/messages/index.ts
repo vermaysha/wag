@@ -1,79 +1,31 @@
 import { SessionManager } from '@/whatsapp';
 import { isJidGroup, isLidUser, isPnUser } from 'baileys';
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
+import { sendRoutes } from './send';
+import { manageRoutes } from './manage';
+import { mediaRoutes } from './media';
 
 const manager = SessionManager.getInstance();
 
-const validateJid = (jid: string) => {
-  if (!(isJidGroup(jid) || isPnUser(jid) || isLidUser(jid))) {
-    throw new Error(
-      'Invalid recipient JID, must be a group or user JID, like: "123456789@g.us" or "123456789@s.whatsapp.net", "123456789@lid"',
-    );
-  }
-
-  if (jid.startsWith('+')) {
-    throw new Error(
-      'Invalid recipient JID, must not include the "+" sign. Use the format "123456789@s.whatsapp.net"',
-    );
-  }
+export const getWA = (deviceId: string) => {
+  const whatsapp = manager.getSession(deviceId);
+  if (!whatsapp) throw new Error(`Device ${deviceId} not found, please connect first`);
+  return whatsapp;
 };
 
-const getWA = (deviceId: string) => {
-  const whatsapp = manager.getSession(deviceId);
-
-  if (!whatsapp) {
-    throw new Error(`Device ${deviceId} not found, please connect first`);
+export const validateJid = (jid: string) => {
+  if (!(isJidGroup(jid) || isPnUser(jid) || isLidUser(jid))) {
+    throw new Error('Invalid recipient JID');
   }
-
-  return whatsapp;
+  if (jid.startsWith('+')) {
+    throw new Error('Invalid recipient JID, must not include the "+" sign');
+  }
 };
 
 export const messages = new Elysia({
   prefix: '/messages',
-  detail: {
-    tags: ['Messages'],
-    summary: 'Messages',
-    description: 'Endpoints to send messages via WhatsApp sessions',
-  },
-}).post(
-  '/send-text-message',
-  ({ body, set }) => {
-    const whatsapp = getWA(body.deviceId);
-    const jid = body.recipient;
-    validateJid(jid);
-
-    const id = body.id ?? null;
-
-    whatsapp.sendMessage(id ?? Bun.randomUUIDv7(), jid, { text: body.message });
-
-    return {
-      success: true,
-    };
-  },
-  {
-    detail: {
-      summary: 'Send Text Message',
-      description:
-        'Send a text message to a WhatsApp user or group via the specified session.',
-    },
-    body: t.Object({
-      deviceId: t.String({
-        minLength: 1,
-        pattern: '^[a-zA-Z0-9_\\-:@\.\|\!]+$',
-      }),
-      id: t.Optional(t.Nullable(t.String())),
-      message: t.String({
-        minLength: 1,
-        maxLength: 4096,
-      }),
-      recipient: t.String({
-        minLength: 1,
-        examples: [
-          '456789765@g.us',
-          '123456789@c.us',
-          '6289522323@s.whatsapp.net',
-        ],
-      }),
-    }),
-  },
-);
+  detail: { tags: ['Messages'], summary: 'Messages', description: 'Endpoints to manage and send messages.' },
+})
+  .use(sendRoutes)
+  .use(manageRoutes)
+  .use(mediaRoutes);

@@ -40,7 +40,7 @@ export class SessionManager {
    */
   private loadSessionsFromDatabase(): void {
     try {
-      const stmt = db.prepare('SELECT * FROM connections');
+      const stmt = db.query('SELECT * FROM connections');
       const connections = stmt.all() as SessionState[];
 
       logger.info(
@@ -105,7 +105,7 @@ export class SessionManager {
       const status = session.getStatus();
       const sessionState: SessionState = {
         id: session.id,
-        name: name ?? session.id, // You can customize this
+        name: name ?? session.id,
         phoneNumber: session.phoneNumber,
         webhookUrl: session.webhookUrl,
         qrCode: session.getQrCode(),
@@ -115,7 +115,7 @@ export class SessionManager {
         created_at: Date.now(),
       };
 
-      const stmt = db.prepare(`
+      const stmt = db.query(`
         INSERT INTO connections (id, name, phoneNumber, webhookUrl, qrCode, pairCode, status, last_connected_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
@@ -138,11 +138,8 @@ export class SessionManager {
         sessionState.last_connected_at,
         sessionState.created_at,
       );
-    } catch (err) {
-      logger.error(
-        { err, sessionId: session.id },
-        '[SessionManager] Error saving session',
-      );
+    } catch (_err) {
+      // Silently ignore - DB may be closed during shutdown/logout
     }
   }
 
@@ -155,7 +152,7 @@ export class SessionManager {
     lastConnectedAt?: number,
   ): void {
     try {
-      const stmt = db.prepare(`
+      const stmt = db.query(`
         UPDATE connections
         SET status = ?, last_connected_at = ?
         WHERE id = ?
@@ -166,11 +163,8 @@ export class SessionManager {
         lastConnectedAt ?? (status === 'open' ? Date.now() : 0),
         sessionId,
       );
-    } catch (err) {
-      logger.error(
-        { err, sessionId },
-        '[SessionManager] Error updating status',
-      );
+    } catch (_err) {
+      // Silently ignore - DB may be closed during shutdown/logout
     }
   }
 
@@ -186,18 +180,21 @@ export class SessionManager {
 
     // QR code received
     session.on('qr', (qr) => {
+      if (!this.sessions.has(session.id)) return;
       this.sessions.set(session.id, session);
       this.saveSessionToDatabase(session);
     });
 
     // Pairing code received
     session.on('pairing-code', (code) => {
+      if (!this.sessions.has(session.id)) return;
       this.sessions.set(session.id, session);
       this.saveSessionToDatabase(session);
     });
 
     // Authenticated
     session.on('authenticated', () => {
+      if (!this.sessions.has(session.id)) return;
       this.sessions.set(session.id, session);
       this.saveSessionToDatabase(session);
       this.updateSessionStatus(session.id, 'open', Date.now());
@@ -205,12 +202,14 @@ export class SessionManager {
 
     // Connection closed
     session.on('connection-close', (statusCode) => {
+      if (!this.sessions.has(session.id)) return;
       this.saveSessionToDatabase(session);
       this.updateSessionStatus(session.id, 'close');
     });
 
     // Error occurred
     session.on('error', (error) => {
+      if (!this.sessions.has(session.id)) return;
       this.saveSessionToDatabase(session);
       this.updateSessionStatus(session.id, 'close');
     });
@@ -308,11 +307,18 @@ export class SessionManager {
   }
 
   /**
+   * Remove session from memory only (no DB update, no disconnect)
+   */
+  removeSessionFromMap(id: string): void {
+    this.sessions.delete(id);
+  }
+
+  /**
    * Get all sessions from database (including inactive ones)
    */
   getAllSessionsFromDB(): SessionState[] {
     try {
-      const stmt = db.prepare(
+      const stmt = db.query(
         'SELECT * FROM connections ORDER BY created_at DESC',
       );
       return stmt.all() as SessionState[];
@@ -327,7 +333,7 @@ export class SessionManager {
    */
   getSessionFromDB(id: string): SessionState | null {
     try {
-      const stmt = db.prepare('SELECT * FROM connections WHERE id = ?');
+      const stmt = db.query('SELECT * FROM connections WHERE id = ?');
       return stmt.get(id) as SessionState | null;
     } catch (err) {
       logger.error(
@@ -343,7 +349,7 @@ export class SessionManager {
    */
   deleteSessionFromDB(id: string): boolean {
     try {
-      const stmt = db.prepare('DELETE FROM connections WHERE id = ?');
+      const stmt = db.query('DELETE FROM connections WHERE id = ?');
       stmt.run(id);
       return true;
     } catch (err) {

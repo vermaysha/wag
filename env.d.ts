@@ -1,9 +1,9 @@
-declare module "*.css" {
+declare module '*.css' {
   const content: string;
   export default content;
 }
 
-declare module "*.ico" {
+declare module '*.ico' {
   const content: string;
   export default content;
 }

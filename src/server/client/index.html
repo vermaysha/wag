@@ -1,1177 +1,865 @@
 <!doctype html>
-<html lang="en" data-bs-theme="light">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WhatsApp Gateway API - Dashboard</title>
-
-    <!-- Bootstrap 5.3 CSS -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <!-- Bootstrap Icons -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-      rel="stylesheet"
-    />
-    <link
-      rel="shortcut icon"
-      href="./icon.ico"
-      type="image/x-icon"
-    />
-    <link rel="apple-touch-icon" href="./icon.ico" />
-    <link rel="icon" href="./icon.ico" type="image/x-icon" />
-
-    <link rel="stylesheet" href="./client.css" />
-  </head>
-
-  <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-      <div class="container">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
-          <i class="bi bi-whatsapp fs-4"></i>
-          <span>WhatsApp Gateway API</span>
-        </a>
-        <div class="navbar-text text-white-50">
-          <small>Dashboard v2.0</small>
-        </div>
-      </div>
-    </nav>
-
-    <!-- Main Container -->
-    <div class="container pb-5">
-      <div class="row g-4">
-        <!-- Left Column: Create Session & Send Message -->
-        <div class="col-lg-5">
-          <!-- Create Session Card -->
-          <div class="card mb-4">
-            <div class="card-header d-flex align-items-center gap-2">
-              <i class="bi bi-plus-circle"></i>
-              <span>Create New Session</span>
-            </div>
-            <div class="card-body">
-              <form id="createSessionForm">
-                <div class="mb-3">
-                  <label for="deviceId" class="form-label">
-                    Device ID <span class="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    class="form-control"
-                    id="deviceId"
-                    placeholder="e.g., my-whatsapp-session"
-                    required
-                    pattern="[a-zA-Z0-9_-]+"
-                    minlength="1"
-                  />
-                  <div class="form-text">
-                    Unique identifier for this session (alphanumeric, dash,
-                    underscore)
-                  </div>
-                  <div class="invalid-feedback">
-                    Please enter a valid Device ID
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label for="sessionName" class="form-label"
-                    >Session Name</label
-                  >
-                  <input
-                    type="text"
-                    class="form-control"
-                    id="sessionName"
-                    placeholder="e.g., My WhatsApp Business"
-                  />
-                  <div class="form-text">
-                    Optional friendly name for this session
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label for="phoneNumber" class="form-label"
-                    >Phone Number</label
-                  >
-                  <input
-                    type="tel"
-                    class="form-control"
-                    id="phoneNumber"
-                    placeholder="e.g., +6281234567890"
-                  />
-                  <div class="form-text">
-                    Optional: Enter to use pairing code instead of QR
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label for="webhookUrl" class="form-label">Webhook URL</label>
-                  <div class="input-group">
-                    <input
-                      type="url"
-                      class="form-control"
-                      id="webhookUrl"
-                      placeholder="https://example.com/webhook"
-                    />
-                    <button
-                      type="button"
-                      class="btn btn-outline-success"
-                      id="testWebhookBtn"
-                    >
-                      <i class="bi bi-check-circle"></i> Test
-                    </button>
-                  </div>
-                  <div class="form-text">
-                    Optional: URL to receive event notifications
-                  </div>
-                  <div
-                    id="webhookStatus"
-                    class="mt-2"
-                    style="display: none"
-                  ></div>
-                  <div class="invalid-feedback">Please enter a valid URL</div>
-                </div>
-
-                <button
-                  type="submit"
-                  class="btn btn-success w-100"
-                  id="createSessionBtn"
-                >
-                  <i class="bi bi-play-circle me-2"></i>Start Session
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <!-- Send Message Card -->
-          <div class="card">
-            <div class="card-header d-flex align-items-center gap-2">
-              <i class="bi bi-send"></i>
-              <span>Send Text Message</span>
-            </div>
-            <div class="card-body">
-              <form id="sendMessageForm">
-                <div class="mb-3">
-                  <label for="msgDeviceId" class="form-label">
-                    Session <span class="text-danger">*</span>
-                  </label>
-                  <select class="form-select" id="msgDeviceId" required>
-                    <option value="">Select a connected session...</option>
-                  </select>
-                  <div class="invalid-feedback">Please select a session</div>
-                </div>
-
-                <div class="mb-3">
-                  <label for="recipient" class="form-label">
-                    Recipient (JID) <span class="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    class="form-control"
-                    id="recipient"
-                    placeholder="e.g., 6281234567890@s.whatsapp.net"
-                    required
-                  />
-                  <div class="jid-helper mt-2">
-                    <strong>Format Examples:</strong><br />
-                    <i class="bi bi-person"></i> Personal:
-                    <code>6281234567890@s.whatsapp.net</code><br />
-                    <i class="bi bi-people"></i> Group:
-                    <code>120363012345678901@g.us</code><br />
-                    <i class="bi bi-phone"></i> Legacy:
-                    <code>6281234567890@c.us</code>
-                  </div>
-                  <div class="invalid-feedback">
-                    Please enter a valid JID format
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label for="message" class="form-label">
-                    Message <span class="text-danger">*</span>
-                  </label>
-                  <textarea
-                    class="form-control"
-                    id="message"
-                    rows="4"
-                    placeholder="Type your message here..."
-                    required
-                    minlength="1"
-                    maxlength="4096"
-                  ></textarea>
-                  <div class="d-flex justify-content-between mt-1">
-                    <div class="invalid-feedback">
-                      Message is required (1-4096 characters)
-                    </div>
-                    <span class="char-counter" id="charCounter">0 / 4096</span>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  class="btn btn-success w-100"
-                  id="sendMessageBtn"
-                >
-                  <i class="bi bi-send me-2"></i>Send Message
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Column: Active Connections -->
-        <div class="col-lg-7">
-          <div class="card">
-            <div
-              class="card-header d-flex justify-content-between align-items-center"
-            >
-              <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-collection"></i>
-                <span>Active Connections</span>
-                <span class="badge bg-light text-dark" id="connectionCount"
-                  >0</span
-                >
-              </div>
-              <div class="d-flex align-items-center gap-3">
-                <div class="form-check form-switch mb-0">
-                  <input
-                    class="form-check-input"
-                    type="checkbox"
-                    id="autoRefreshToggle"
-                    checked
-                  />
-                  <label
-                    class="form-check-label small text-white"
-                    for="autoRefreshToggle"
-                  >
-                    Auto-refresh (10s)
-                  </label>
-                </div>
-                <button
-                  class="btn btn-light btn-sm"
-                  id="refreshBtn"
-                  title="Refresh Now"
-                >
-                  <i class="bi bi-arrow-clockwise" id="refreshIcon"></i>
-                </button>
-              </div>
-            </div>
-            <div class="card-body">
-              <div id="connectionsList">
-                <div class="empty-state">
-                  <i class="bi bi-inbox"></i>
-                  <p class="mb-0">No connections found</p>
-                  <small>Create a new session to get started</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WAG - WhatsApp Gateway</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<link rel="stylesheet" href="client.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand"><i class="bi bi-whatsapp"></i> WAG</div>
+      <div class="sidebar-actions">
+        <button class="icon-btn" onclick="showAddDeviceModal()" title="Add Device"><i class="bi bi-plus-lg"></i></button>
+        <button class="icon-btn" onclick="showDeviceModal()" title="Devices"><i class="bi bi-phone"></i></button>
       </div>
     </div>
+    <div class="search-wrap">
+      <input class="search-box" id="searchInput" placeholder="Search or start new chat" oninput="filterChats()">
+    </div>
+    <div class="chat-list" id="chatList"></div>
+  </aside>
 
-    <!-- QR Code Modal -->
-    <div
-      class="modal fade"
-      id="qrModal"
-      tabindex="-1"
-      aria-labelledby="qrModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header bg-success text-white">
-            <h5 class="modal-title" id="qrModalLabel">
-              <i class="bi bi-qr-code me-2"></i>Authentication
-            </h5>
-            <button
-              type="button"
-              class="btn-close btn-close-white"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div id="qrContent" class="text-center">
-              <div class="spinner-border text-success" role="status">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-              <p class="text-muted mt-2">Loading authentication data...</p>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <small class="text-muted me-auto">
-              <i class="bi bi-arrow-repeat me-1"></i>Auto-refreshes every 5
-              seconds
-            </small>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
-            >
-              Close
-            </button>
-          </div>
+  <main class="main-panel">
+    <div id="chatView" style="display:none;flex-direction:column;height:100%">
+      <div class="chat-header">
+        <div class="chat-avatar" id="chatAvatar">?</div>
+        <div class="chat-header-info">
+          <div class="chat-header-name" id="chatName">Loading...</div>
+          <div class="chat-header-status" id="chatStatus">offline</div>
+        </div>
+        <div class="sidebar-actions">
+          <button class="icon-btn" onclick="fetchMessages()" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
         </div>
       </div>
-    </div>
-
-    <!-- Logout Confirmation Modal -->
-    <div
-      class="modal fade"
-      id="logoutModal"
-      tabindex="-1"
-      aria-labelledby="logoutModalLabel"
-      aria-hidden="true"
-    >
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header bg-danger text-white">
-            <h5 class="modal-title" id="logoutModalLabel">
-              <i class="bi bi-exclamation-triangle me-2"></i>Confirm Logout
-            </h5>
-            <button
-              type="button"
-              class="btn-close btn-close-white"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <p>
-              Are you sure you want to logout session
-              <strong id="logoutSessionId"></strong>?
-            </p>
-            <div class="alert alert-warning mb-0">
-              <i class="bi bi-exclamation-circle me-2"></i>
-              This will delete all session data and you will need to
-              re-authenticate.
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
-            >
-              Cancel
-            </button>
-            <button type="button" class="btn btn-danger" id="confirmLogoutBtn">
-              <i class="bi bi-box-arrow-right me-2"></i>Logout & Delete
-            </button>
-          </div>
+      <div class="messages-area" id="messagesArea"></div>
+      <div class="reply-preview" id="replyPreview" style="display:none">
+        <div class="reply-preview-line">
+          <div class="reply-preview-name" id="replyName"></div>
+          <div class="reply-preview-text" id="replyText"></div>
         </div>
+        <span class="reply-close" onclick="cancelReply()">&times;</span>
+      </div>
+      <div class="input-area" style="position:relative">
+        <button class="icon-btn" onclick="toggleAttachMenu()"><i class="bi bi-paperclip"></i></button>
+        <input id="msgInput" placeholder="Type a message" onkeydown="if(event.key==='Enter')sendMsg()">
+        <button class="icon-btn primary" onclick="sendMsg()"><i class="bi bi-send"></i></button>
+        <div class="attach-menu" id="attachMenu" style="display:none">
+          <div class="attach-item" onclick="pickFile('image/*')"><i style="background:#ef5350"><i class="bi bi-image"></i></i><span>Image</span></div>
+          <div class="attach-item" onclick="pickFile('audio/*')"><i style="background:#ff9800"><i class="bi bi-music-note"></i></i><span>Audio</span></div>
+          <div class="attach-item" onclick="pickFile('video/*')"><i style="background:#4caf50"><i class="bi bi-camera-reels"></i></i><span>Video</span></div>
+          <div class="attach-item" onclick="pickFile('*/*')"><i style="background:#2196f3"><i class="bi bi-file-earmark"></i></i><span>Document</span></div>
+        </div>
+        <input type="file" id="fileInput" style="display:none" onchange="sendMedia(event)">
       </div>
     </div>
-
-    <!-- Toast Container -->
-    <div class="toast-container position-fixed end-0 top-0 p-3">
-      <div
-        id="toastTemplate"
-        class="toast align-items-center border-0"
-        role="alert"
-        aria-live="assertive"
-        aria-atomic="true"
-        style="display: none"
-      >
-        <div class="d-flex">
-          <div class="toast-body d-flex align-items-center gap-2">
-            <i class="bi toast-icon"></i>
-            <span class="toast-message"></span>
-          </div>
-          <button
-            type="button"
-            class="btn-close btn-close-white m-auto me-2"
-            data-bs-dismiss="toast"
-            aria-label="Close"
-          ></button>
-        </div>
-      </div>
+    <div class="empty-state" id="emptyState">
+      <i class="bi bi-whatsapp"></i>
+      <p>Select a chat to start messaging</p>
     </div>
-
-    <!-- Loading Overlay -->
-    <div class="spinner-overlay" id="loadingOverlay" style="display: none">
-      <div class="text-center">
-        <div
-          class="spinner-border text-success"
-          style="width: 3rem; height: 3rem"
-          role="status"
-        >
-          <span class="visually-hidden">Loading...</span>
-        </div>
-        <p class="text-success fw-bold mt-3">Processing...</p>
-      </div>
+  </main>
+</div>
+<div class="toast-container" id="toastContainer"></div>
+<div id="imageModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.85);cursor:zoom-out;align-items:center;justify-content:center" onclick="this.style.display='none'">
+  <img id="modalImage" style="max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain">
+</div>
+    <div id="addDeviceModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--panel-bg);border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+    <h3 style="margin-bottom:16px;font-weight:600">Tambah Device Baru</h3>
+    <input id="newDeviceName" placeholder="Nama device (contoh: HP Sales)" style="width:100%;padding:10px 14px;border:none;border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;outline:none;margin-bottom:10px">
+    <input id="newDevicePhone" placeholder="Nomor telepon untuk pairing via kode (opsional)" style="width:100%;padding:10px 14px;border:none;border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;outline:none;margin-bottom:6px">
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Kosongi untuk scan QR. Isi nomor untuk pairing via kode (lebih cepat).</p>
+    <input id="newDeviceWebhook" placeholder="URL callback (default: http://localhost:8000)" value="http://localhost:8000" style="width:100%;padding:10px 14px;border:none;border-radius:8px;background:var(--input-bg);color:var(--text-secondary);font-size:13px;outline:none;margin-bottom:16px">
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Webhook URL adalah alamat server eBilling yang menerima notifikasi status device. Default: <code>http://localhost:8000</code></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="$('addDeviceModal').style.display='none'">Batal</button>
+      <button class="btn btn-success" onclick="createDevice()">Tambah & Scan QR</button>
     </div>
-
-    <!-- Bootstrap 5.3 JS Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- QRCode.js -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-    <script>
-      // ============================================
-      // Configuration
-      // ============================================
-      const API_URL = window.location.origin;
-      let autoRefreshInterval = null;
-      let qrRefreshInterval = null;
-      let currentQrDeviceId = null;
-
-      // ============================================
-      // Utility Functions
-      // ============================================
-      function showLoading() {
-        document.getElementById('loadingOverlay').style.display = 'flex';
-      }
-
-      function hideLoading() {
-        document.getElementById('loadingOverlay').style.display = 'none';
-      }
-
-      function showToast(message, type) {
-        type = type || 'success';
-        const toastContainer = document.querySelector('.toast-container');
-        const template = document.getElementById('toastTemplate');
-        const toast = template.cloneNode(true);
-        toast.id = 'toast-' + Date.now();
-        toast.style.display = 'block';
-
-        const icons = {
-          success: 'bi-check-circle-fill',
-          error: 'bi-x-circle-fill',
-          warning: 'bi-exclamation-circle-fill',
-          info: 'bi-info-circle-fill',
-        };
-
-        const bgColors = {
-          success: 'bg-success text-white',
-          error: 'bg-danger text-white',
-          warning: 'bg-warning text-dark',
-          info: 'bg-info text-white',
-        };
-
-        const classes = bgColors[type].split(' ');
-        for (let i = 0; i < classes.length; i++) {
-          toast.classList.add(classes[i]);
-        }
-        toast.querySelector('.toast-icon').classList.add(icons[type]);
-        toast.querySelector('.toast-message').textContent = message;
-
-        toastContainer.appendChild(toast);
-
-        const bsToast = new bootstrap.Toast(toast, {
-          autohide: true,
-          delay: 5000,
-        });
-        bsToast.show();
-
-        toast.addEventListener('hidden.bs.toast', function () {
-          toast.remove();
-        });
-      }
-
-      function formatDate(timestamp) {
-        if (!timestamp) return 'N/A';
-        const date = new Date(timestamp);
-        return date.toLocaleString();
-      }
-
-      function getStatusBadge(status) {
-        const statusMap = {
-          open: { cls: 'bg-success', text: 'Connected' },
-          connecting: { cls: 'bg-warning text-dark', text: 'Connecting' },
-          close: { cls: 'bg-danger', text: 'Disconnected' },
-          pending: { cls: 'bg-secondary', text: 'Pending' },
-        };
-        const s = statusMap[status] || {
-          cls: 'bg-secondary',
-          text: status || 'Unknown',
-        };
-        return (
-          '<span class="badge badge-status ' + s.cls + '">' + s.text + '</span>'
-        );
-      }
-
-      function validateJID(jid) {
-        const pattern = /^[\d]+@(s\.whatsapp\.net|c\.us|g\.us|lid)$/;
-        return pattern.test(jid);
-      }
-
-      // ============================================
-      // API Functions
-      // ============================================
-      async function apiRequest(endpoint, options) {
-        options = options || {};
-        try {
-          const response = await fetch(API_URL + endpoint, {
-            headers: Object.assign(
-              {
-                'Content-Type': 'application/json',
-              },
-              options.headers || {},
-            ),
-            method: options.method || 'GET',
-            body: options.body,
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.message || data.error || 'API request failed');
-          }
-
-          return data;
-        } catch (error) {
-          console.error('API Error:', error);
-          throw error;
-        }
-      }
-
-      // ============================================
-      // Connections Management
-      // ============================================
-      async function fetchConnections() {
-        const refreshIcon = document.getElementById('refreshIcon');
-        refreshIcon.classList.add('refresh-indicator');
-
-        try {
-          const data = await apiRequest('/connections');
-          renderConnections(data.data || []);
-          updateSessionDropdown(data.data || []);
-        } catch (error) {
-          showToast('Failed to fetch connections: ' + error.message, 'error');
-        } finally {
-          refreshIcon.classList.remove('refresh-indicator');
-        }
-      }
-
-      function renderConnections(connections) {
-        const container = document.getElementById('connectionsList');
-        document.getElementById('connectionCount').textContent =
-          connections.length;
-
-        if (connections.length === 0) {
-          container.innerHTML =
-            '<div class="empty-state">' +
-            '<i class="bi bi-inbox"></i>' +
-            '<p class="mb-0">No connections found</p>' +
-            '<small>Create a new session to get started</small>' +
-            '</div>';
-          return;
-        }
-
-        let html = '';
-        for (let i = 0; i < connections.length; i++) {
-          const conn = connections[i];
-          const statusClass =
-            conn.status === 'open'
-              ? 'status-connected'
-              : conn.status === 'connecting'
-                ? 'status-pending'
-                : 'status-disconnected';
-          const isConnected = conn.status === 'open';
-          const isStopped = conn.status === 'close';
-          const isConnecting = conn.status === 'connecting';
-
-          html +=
-            '<div class="card connection-card ' +
-            statusClass +
-            ' mb-3">' +
-            '<div class="card-body">' +
-            '<div class="d-flex justify-content-between align-items-start mb-2">' +
-            '<div>' +
-            '<h6 class="mb-1 fw-bold">' +
-            '<i class="bi bi-phone me-2"></i>' +
-            (conn.name || conn.id) +
-            '</h6>' +
-            '<small class="text-muted">ID: ' +
-            conn.id +
-            '</small>' +
-            '</div>' +
-            getStatusBadge(conn.status) +
-            '</div>' +
-            '<div class="row g-2 mb-3 small text-muted">' +
-            '<div class="col-6">' +
-            '<i class="bi bi-telephone me-1"></i>' +
-            (conn.phoneNumber || 'Not linked') +
-            '</div>' +
-            '<div class="col-6">' +
-            '<i class="bi bi-clock me-1"></i>' +
-            formatDate(conn.last_connected_at) +
-            '</div>' +
-            '<div class="col-12">' +
-            '<i class="bi bi-calendar me-1"></i>' +
-            'Created: ' +
-            formatDate(conn.created_at) +
-            '</div>' +
-            (conn.webhookUrl
-              ? '<div class="col-12">' +
-                '<i class="bi bi-link-45deg me-1"></i>' +
-                conn.webhookUrl +
-                '</div>'
-              : '') +
-            '</div>' +
-            '<div class="action-btn-group d-flex flex-wrap gap-2">' +
-            (isStopped
-              ? '<button class="btn btn-success btn-sm" onclick="startSession(\'' +
-                conn.id +
-                '\')">' +
-                '<i class="bi bi-play-fill me-1"></i>Start' +
-                '</button>'
-              : '') +
-            (isConnecting
-              ? '<button class="btn btn-outline-success btn-sm" onclick="showQrCode(\'' +
-                conn.id +
-                '\')">' +
-                '<i class="bi bi-qr-code me-1"></i>QR/Code' +
-                '</button>'
-              : '') +
-            (isConnected
-              ? '<button class="btn btn-outline-secondary btn-sm" onclick="toggleOnlineStatus(\'' +
-                conn.id +
-                '\', true)">' +
-                '<i class="bi bi-circle-fill text-success me-1"></i>Online' +
-                '</button>' +
-                '<button class="btn btn-outline-secondary btn-sm" onclick="toggleOnlineStatus(\'' +
-                conn.id +
-                '\', false)">' +
-                '<i class="bi bi-circle me-1"></i>Offline' +
-                '</button>' +
-                '<button class="btn btn-warning btn-sm" onclick="confirmLogout(\'' +
-                conn.id +
-                '\')">' +
-                '<i class="bi bi-box-arrow-right me-1"></i>Logout' +
-                '</button>'
-              : '') +
-            (isStopped
-              ? ''
-              : '<button class="btn btn-danger btn-sm" onclick="stopSession(\'' +
-                conn.id +
-                '\')">' +
-                '<i class="bi bi-stop-fill me-1"></i>Stop' +
-                '</button>') +
-            '</div>' +
-            '</div>' +
-            '</div>';
-        }
-        container.innerHTML = html;
-      }
-
-      function updateSessionDropdown(connections) {
-        const select = document.getElementById('msgDeviceId');
-        const currentValue = select.value;
-
-        const connectedSessions = [];
-        for (let i = 0; i < connections.length; i++) {
-          if (connections[i].status === 'open') {
-            connectedSessions.push(connections[i]);
-          }
-        }
-
-        let html = '<option value="">Select a connected session...</option>';
-        for (let i = 0; i < connectedSessions.length; i++) {
-          const conn = connectedSessions[i];
-          const selected = conn.id === currentValue ? ' selected' : '';
-          const label =
-            (conn.name || conn.id) +
-            (conn.phoneNumber ? ' (' + conn.phoneNumber + ')' : '');
-          html +=
-            '<option value="' +
-            conn.id +
-            '"' +
-            selected +
-            '>' +
-            label +
-            '</option>';
-        }
-        select.innerHTML = html;
-      }
-
-      // ============================================
-      // Session Actions
-      // ============================================
-      async function createSession(deviceId, phoneNumber, webhookUrl, name) {
-        showLoading();
-        try {
-          const body = { deviceId: deviceId };
-          if (phoneNumber) body.phoneNumber = phoneNumber;
-          if (webhookUrl) body.webhookUrl = webhookUrl;
-          if (name) body.name = name;
-
-          await apiRequest('/connections/start', {
-            method: 'POST',
-            body: JSON.stringify(body),
-          });
-
-          showToast('Session started successfully!', 'success');
-          setTimeout(async () => {
-            await fetchConnections();
-
-            setTimeout(function () {
-              showQrCode(deviceId);
-            }, 1500);
-          }, 500);
-        } catch (error) {
-          showToast('Failed to start session: ' + error.message, 'error');
-        } finally {
-          hideLoading();
-        }
-      }
-
-      async function startSession(deviceId) {
-        showLoading();
-        try {
-          await apiRequest('/connections/start', {
-            method: 'POST',
-            body: JSON.stringify({ deviceId: deviceId }),
-          });
-
-          showToast('Session started successfully!', 'success');
-          setTimeout(async () => {
-            await fetchConnections();
-
-            setTimeout(function () {
-              showQrCode(deviceId);
-            }, 1500);
-          }, 500);
-        } catch (error) {
-          showToast('Failed to start session: ' + error.message, 'error');
-        } finally {
-          hideLoading();
-        }
-      }
-
-      async function stopSession(deviceId) {
-        showLoading();
-        try {
-          await apiRequest('/connections/stop', {
-            method: 'POST',
-            body: JSON.stringify({ deviceId: deviceId }),
-          });
-
-          showToast('Session stopped successfully!', 'success');
-          await fetchConnections();
-        } catch (error) {
-          showToast('Failed to stop session: ' + error.message, 'error');
-        } finally {
-          hideLoading();
-        }
-      }
-
-      async function logoutSession(deviceId) {
-        showLoading();
-        try {
-          await apiRequest('/connections/logout', {
-            method: 'POST',
-            body: JSON.stringify({ deviceId: deviceId }),
-          });
-
-          showToast('Session logged out and deleted successfully!', 'success');
-          await fetchConnections();
-
-          // Close modal
-          const modal = bootstrap.Modal.getInstance(
-            document.getElementById('logoutModal'),
-          );
-          if (modal) modal.hide();
-        } catch (error) {
-          showToast('Failed to logout session: ' + error.message, 'error');
-        } finally {
-          hideLoading();
-        }
-      }
-
-      function confirmLogout(deviceId) {
-        document.getElementById('logoutSessionId').textContent = deviceId;
-        document.getElementById('confirmLogoutBtn').onclick = function () {
-          logoutSession(deviceId);
-        };
-        new bootstrap.Modal(document.getElementById('logoutModal')).show();
-      }
-
-      async function toggleOnlineStatus(deviceId, online) {
-        try {
-          await apiRequest('/connections/set-online', {
-            method: 'POST',
-            body: JSON.stringify({ deviceId: deviceId, online: online }),
-          });
-
-          showToast(
-            'Status set to ' + (online ? 'Online' : 'Offline'),
-            'success',
-          );
-        } catch (error) {
-          showToast('Failed to set status: ' + error.message, 'error');
-        }
-      }
-
-      // ============================================
-      // QR Code & Pairing Code
-      // ============================================
-      async function showQrCode(deviceId) {
-        currentQrDeviceId = deviceId;
-        const modal = new bootstrap.Modal(document.getElementById('qrModal'));
-        document.getElementById('qrModalLabel').innerHTML =
-          '<i class="bi bi-qr-code me-2"></i>Authentication - ' + deviceId;
-        modal.show();
-
-        await refreshQrCode();
-
-        // Start auto-refresh
-        if (qrRefreshInterval) clearInterval(qrRefreshInterval);
-        qrRefreshInterval = setInterval(refreshQrCode, 5000);
-      }
-
-      async function refreshQrCode() {
-        if (!currentQrDeviceId) return;
-
-        const container = document.getElementById('qrContent');
-
-        try {
-          // Use POST method since GET with body is non-standard
-          const data = await apiRequest(
-            '/connections/qr-code?deviceId=' +
-              encodeURIComponent(currentQrDeviceId),
-          );
-
-          if (!data.success) {
-            throw new Error(data.message || 'Failed to get QR code');
-          }
-
-          const qrCode = data.data.qrCode;
-          const pairingCode = data.data.pairingCode;
-          const hasQrCode = data.data.hasQrCode;
-          const hasPairingCode = data.data.hasPairingCode;
-
-          if ((hasQrCode && qrCode) || (hasPairingCode && pairingCode)) {
-            let html = '<div class="row g-3">';
-
-            // QR Code section
-            if (hasQrCode && qrCode) {
-              html +=
-                '<div class="col-12">' +
-                '<div class="qr-container mb-2">' +
-                '<canvas id="qrCanvas"></canvas>' +
-                '</div>' +
-                '<p class="text-muted mb-0 text-center">' +
-                '<i class="bi bi-qr-code-scan me-1"></i>Scan this QR code with WhatsApp' +
-                '</p>' +
-                '</div>';
-            }
-
-            // Divider if both are available
-            if (hasQrCode && qrCode && hasPairingCode && pairingCode) {
-              html +=
-                '<div class="col-12">' +
-                '<div class="d-flex align-items-center my-2">' +
-                '<hr class="flex-grow-1">' +
-                '<span class="px-3 text-muted fw-bold">OR</span>' +
-                '<hr class="flex-grow-1">' +
-                '</div>' +
-                '</div>';
-            }
-
-            // Pairing Code section
-            if (hasPairingCode && pairingCode) {
-              html +=
-                '<div class="col-12">' +
-                '<div class="pairing-code mb-2">' +
-                pairingCode +
-                '</div>' +
-                '<p class="text-muted mb-2 text-center">' +
-                '<i class="bi bi-phone me-1"></i>Enter this code in WhatsApp' +
-                '</p>' +
-                '<div class="text-center">' +
-                '<button class="btn btn-outline-success btn-sm" onclick="copyPairingCode(\'' +
-                pairingCode +
-                '\')">' +
-                '<i class="bi bi-clipboard me-1"></i>Copy Code' +
-                '</button>' +
-                '</div>' +
-                '</div>';
-            }
-
-            html += '</div>';
-            container.innerHTML = html;
-
-            // Generate QR code if available
-            if (hasQrCode && qrCode) {
-              QRCode.toCanvas(document.getElementById('qrCanvas'), qrCode, {
-                width: 256,
-                margin: 2,
-                color: {
-                  dark: '#198754',
-                  light: '#ffffff',
-                },
-              });
-            }
-          } else {
-            container.innerHTML =
-              '<div class="alert alert-info mb-0">' +
-              '<i class="bi bi-info-circle me-2"></i>' +
-              'No QR code or pairing code available. The session might already be authenticated.' +
-              '</div>';
-          }
-        } catch (error) {
-          container.innerHTML =
-            '<div class="alert alert-danger mb-0">' +
-            '<i class="bi bi-exclamation-triangle me-2"></i>' +
-            error.message +
-            '</div>';
-        }
-      }
-
-      function copyPairingCode(code) {
-        navigator.clipboard
-          .writeText(code)
-          .then(function () {
-            showToast('Pairing code copied to clipboard!', 'success');
-          })
-          .catch(function () {
-            showToast('Failed to copy code', 'error');
-          });
-      }
-
-      // Clean up QR refresh when modal closes
-      document
-        .getElementById('qrModal')
-        .addEventListener('hidden.bs.modal', function () {
-          if (qrRefreshInterval) {
-            clearInterval(qrRefreshInterval);
-            qrRefreshInterval = null;
-          }
-          currentQrDeviceId = null;
-        });
-
-      // ============================================
-      // Webhook Validation
-      // ============================================
-      async function testWebhook() {
-        const webhookUrl = document.getElementById('webhookUrl').value.trim();
-        const statusDiv = document.getElementById('webhookStatus');
-        const testBtn = document.getElementById('testWebhookBtn');
-
-        if (!webhookUrl) {
-          statusDiv.style.display = 'none';
-          return;
-        }
-
-        // Validate URL format
-        try {
-          new URL(webhookUrl);
-        } catch (e) {
-          statusDiv.innerHTML =
-            '<span class="webhook-status invalid">' +
-            '<i class="bi bi-x-circle"></i> Invalid URL format' +
-            '</span>';
-          statusDiv.style.display = 'block';
-          return;
-        }
-
-        testBtn.disabled = true;
-        testBtn.innerHTML =
-          '<span class="spinner-border spinner-border-sm"></span>';
-        statusDiv.innerHTML =
-          '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Testing webhook...</span>';
-        statusDiv.style.display = 'block';
-
-        try {
-          const res = await fetch('/test-callback?host='+encodeURIComponent(webhookUrl), {
-            method: 'GET',
-          });
-
-          const resData = await res.json();
-
-          if (res.ok) {
-            statusDiv.innerHTML =
-              '<span class="webhook-status valid">' +
-              '<i class="bi bi-check-circle"></i> Webhook is reachable' +
-              '</span>';
-          } else {
-            statusDiv.innerHTML =
-              '<span class="webhook-status invalid">' +
-              '<i class="bi bi-x-circle"></i> Webhook responded with message ' +
-              resData.message +
-              '</span>';
-          }
-
-        } catch (error) {
-          statusDiv.innerHTML =
-            '<span class="webhook-status invalid">' +
-            '<i class="bi bi-x-circle"></i> Failed to reach webhook: ' +
-            error.message +
-            '</span>';
-        } finally {
-          testBtn.disabled = false;
-          testBtn.innerHTML = '<i class="bi bi-check-circle"></i> Test';
-        }
-      }
-
-      // ============================================
-      // Send Message
-      // ============================================
-      async function sendMessage(deviceId, recipient, message) {
-        showLoading();
-        try {
-          await apiRequest('/messages/send-text-message', {
-            method: 'POST',
-            body: JSON.stringify({
-              deviceId: deviceId,
-              recipient: recipient,
-              message: message,
-            }),
-          });
-
-          showToast('Message sent successfully!', 'success');
-
-          // Clear message field
-          document.getElementById('message').value = '';
-          updateCharCounter();
-        } catch (error) {
-          showToast('Failed to send message: ' + error.message, 'error');
-        } finally {
-          hideLoading();
-        }
-      }
-
-      function updateCharCounter() {
-        const message = document.getElementById('message').value;
-        const counter = document.getElementById('charCounter');
-        const length = message.length;
-
-        counter.textContent = length + ' / 4096';
-        counter.className = 'char-counter';
-
-        if (length > 4000) {
-          counter.classList.add('danger');
-        } else if (length > 3500) {
-          counter.classList.add('warning');
-        }
-      }
-
-      // ============================================
-      // Auto-Refresh Management
-      // ============================================
-      function startAutoRefresh() {
-        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-        autoRefreshInterval = setInterval(fetchConnections, 10000);
-      }
-
-      function stopAutoRefresh() {
-        if (autoRefreshInterval) {
-          clearInterval(autoRefreshInterval);
-          autoRefreshInterval = null;
-        }
-      }
-
-      // ============================================
-      // Event Listeners
-      // ============================================
-      document.addEventListener('DOMContentLoaded', function () {
-        // Initial load
-        fetchConnections();
-
-        // Auto-refresh toggle
-        const autoRefreshToggle = document.getElementById('autoRefreshToggle');
-        if (autoRefreshToggle.checked) {
-          startAutoRefresh();
-        }
-
-        autoRefreshToggle.addEventListener('change', function (e) {
-          if (e.target.checked) {
-            startAutoRefresh();
-            showToast('Auto-refresh enabled', 'info');
-          } else {
-            stopAutoRefresh();
-            showToast('Auto-refresh disabled', 'info');
-          }
-        });
-
-        // Manual refresh
-        document
-          .getElementById('refreshBtn')
-          .addEventListener('click', fetchConnections);
-
-        // Create session form
-        document
-          .getElementById('createSessionForm')
-          .addEventListener('submit', async function (e) {
-            e.preventDefault();
-
-            const form = e.target;
-            if (!form.checkValidity()) {
-              form.classList.add('was-validated');
-              return;
-            }
-
-            const deviceId = document.getElementById('deviceId').value.trim();
-            const phoneNumber =
-              document.getElementById('phoneNumber').value.trim() || null;
-            const webhookUrl =
-              document.getElementById('webhookUrl').value.trim() || null;
-            const name =
-              document.getElementById('sessionName').value.trim() || null;
-
-            await createSession(deviceId, phoneNumber, webhookUrl, name);
-
-            // Reset form
-            form.reset();
-            form.classList.remove('was-validated');
-            document.getElementById('webhookStatus').style.display = 'none';
-          });
-
-        // Test webhook button
-        document
-          .getElementById('testWebhookBtn')
-          .addEventListener('click', testWebhook);
-
-        // Send message form
-        document
-          .getElementById('sendMessageForm')
-          .addEventListener('submit', async function (e) {
-            e.preventDefault();
-
-            const form = e.target;
-            const recipient = document.getElementById('recipient').value.trim();
-
-            // Custom JID validation
-            if (!validateJID(recipient)) {
-              document
-                .getElementById('recipient')
-                .setCustomValidity('Invalid JID format');
-              form.classList.add('was-validated');
-              showToast(
-                'Invalid JID format. Use: number@s.whatsapp.net, number@g.us, or number@c.us',
-                'error',
-              );
-              return;
-            } else {
-              document.getElementById('recipient').setCustomValidity('');
-            }
-
-            if (!form.checkValidity()) {
-              form.classList.add('was-validated');
-              return;
-            }
-
-            const deviceId = document.getElementById('msgDeviceId').value;
-            const message = document.getElementById('message').value.trim();
-
-            await sendMessage(deviceId, recipient, message);
-          });
-
-        // Reset JID validation on input
-        document
-          .getElementById('recipient')
-          .addEventListener('input', function () {
-            this.setCustomValidity('');
-          });
-
-        // Character counter
-        document
-          .getElementById('message')
-          .addEventListener('input', updateCharCounter);
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let currentDevice = null, currentJid = null;
+let devices = [], chats = [], replyTarget = null;
+let liveSse = null, pollTimer = null, msgOffset = 0, allMessages = [];
+
+// ── Helpers ──
+function $(id) { return document.getElementById(id); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function toast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  $('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+function showImage(src) {
+  $('modalImage').src = src;
+  $('imageModal').style.display = 'flex';
+}
+function mediaError(el) {
+  el.style.display = 'none';
+  const div = document.createElement('div');
+  div.style.cssText = 'padding:8px;color:var(--text-secondary);font-style:italic;font-size:12px';
+  div.textContent = 'Media tidak tersedia';
+  el.parentElement.appendChild(div);
+}
+
+// ── Add Device Modal ──
+function showAddDeviceModal() {
+  $('newDeviceName').value = '';
+  $('newDevicePhone').value = '';
+  $('addDeviceModal').style.display = 'flex';
+  setTimeout(() => $('newDeviceName').focus(), 100);
+}
+
+async function createDevice() {
+  const name = $('newDeviceName').value.trim();
+  if (!name) { toast('Nama device wajib diisi', 'error'); return; }
+
+  const phone = $('newDevicePhone').value.trim() || null;
+  const webhookBase = $('newDeviceWebhook').value.trim().replace(/\/+$/, '') || 'http://localhost:8000';
+  const deviceId = crypto.randomUUID();
+
+  $('addDeviceModal').style.display = 'none';
+
+  try {
+    toast('Membuat device ' + name + '...');
+    const body = {
+      deviceId,
+      name,
+      webhookUrl: webhookBase + '/callback/whatsapp/' + deviceId,
+    };
+    if (phone) body.phoneNumber = phone;
+
+    await api('/connections/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+
+    toast('Device dibuat');
+    await loadDevices();
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    if (phone) {
+      await showPairingCode(deviceId);
+    } else {
+      await showQr(deviceId);
+    }
+  } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+}
+
+// ── Device Actions ──
+async function quickStart(deviceId) {
+  try {
+    await api('/connections/start', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId }),
+    });
+    toast('Device started');
+    loadDevices();
+    setTimeout(loadDevices, 2000);
+  } catch (e) { toast('Start failed: ' + e.message, 'error'); }
+}
+
+async function quickStop(deviceId) {
+  try {
+    await api('/connections/stop', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId }),
+    });
+    toast('Device stopped');
+    loadDevices();
+  } catch (e) { toast('Stop failed: ' + e.message, 'error'); }
+}
+
+async function showPairingCode(deviceId) {
+  try {
+    const conn = await api('/connections/' + deviceId);
+    const status = conn.data?.currentStatus;
+    if (status?.isLoggedIn) {
+      toast('Device sudah terhubung', 'error');
+      return;
+    }
+
+    // polling sampai pairing code tersedia
+    let pairCode = null;
+    for (let i = 0; i < 10; i++) {
+      const d = await api('/connections/qr-code?deviceId=' + deviceId);
+      pairCode = d.data?.pairingCode;
+      if (pairCode) break;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    if (!pairCode) {
+      toast('Pairing code tidak tersedia, coba scan QR', 'error');
+      await showQr(deviceId);
+      return;
+    }
+
+    const existing = document.getElementById('qrCanvasContainer');
+    if (existing) existing.remove();
+
+    const container = document.createElement('div');
+    container.id = 'qrCanvasContainer';
+    container.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:16px;padding:24px';
+    container.onclick = () => container.remove();
+
+    const label = document.createElement('div');
+    label.style.cssText = 'color:var(--text-secondary);font-size:13px;text-align:center';
+    label.textContent = 'Masukkan kode ini di WhatsApp > Linked Devices > Pair with phone number';
+
+    const codeDisplay = document.createElement('div');
+    codeDisplay.style.cssText = 'font-size:36px;font-weight:700;letter-spacing:6px;color:var(--text);background:var(--input-bg);padding:16px 32px;border-radius:12px;font-family:monospace';
+    codeDisplay.textContent = pairCode;
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:var(--text-secondary);font-size:12px;text-align:center';
+    hint.innerHTML = 'Kode akan otomatis terhubung setelah dimasukkan.<br>Klik di luar kotak untuk tutup.';
+
+    container.appendChild(label);
+    container.appendChild(codeDisplay);
+    container.appendChild(hint);
+    document.body.appendChild(container);
+  } catch (e) { toast('Pairing error: ' + e.message, 'error'); }
+}
+
+async function showQr(deviceId) {
+  try {
+    // cek status device dulu
+    const conn = await api('/connections/' + deviceId);
+    const status = conn.data?.currentStatus;
+    if (status?.isLoggedIn) {
+      toast('Device sudah terhubung', 'error');
+      return;
+    }
+
+    // start device dulu kalau offline
+    if (!status?.connectionState || status.connectionState === 'close') {
+      toast('Memulai device...');
+      await api('/connections/start', {
+        method: 'POST',
+        body: JSON.stringify({ deviceId }),
       });
-    </script>
-  </body>
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    // ambil QR
+    const d = await api('/connections/qr-code?deviceId=' + deviceId);
+    const qr = d.data?.qrCode;
+    if (!qr) { toast('QR belum tersedia, coba lagi', 'error'); return; }
+
+    const existing = document.getElementById('qrCanvasContainer');
+    if (existing) existing.remove();
+
+    const container = document.createElement('div');
+    container.id = 'qrCanvasContainer';
+    container.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:16px';
+    container.onclick = () => container.remove();
+
+    const canvas = document.createElement('canvas');
+    let pollTimer;
+    let currentQr = qr;
+
+    function renderQr(text) {
+      canvas.innerHTML = '';
+      QRCode.toCanvas(canvas, text, { width: 280 }, (err) => {
+        if (err) { toast('QR generation failed', 'error'); return; }
+        canvas.style.maxWidth = '90vw';
+        canvas.style.maxHeight = '90vh';
+        canvas.style.borderRadius = '12px';
+      });
+    }
+
+    renderQr(qr);
+
+    // polling QR rolling tiap 10 detik
+    pollTimer = setInterval(async () => {
+      try {
+        const d = await api('/connections/qr-code?deviceId=' + deviceId);
+        const newQr = d.data?.qrCode;
+        if (newQr && newQr !== currentQr) {
+          currentQr = newQr;
+          renderQr(newQr);
+        }
+      } catch {}
+    }, 10000);
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:var(--text-secondary);font-size:13px;text-align:center';
+    hint.textContent = 'Scan QR ini dari WhatsApp > Linked Devices';
+
+    container.onclick = () => {
+      clearInterval(pollTimer);
+      container.remove();
+    };
+
+    container.appendChild(canvas);
+    container.appendChild(hint);
+    document.body.appendChild(container);
+  } catch (e) { toast('QR error: ' + e.message, 'error'); }
+}
+
+async function reloadDevice(deviceId) {
+  try {
+    await api('/connections/stop', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId }),
+    });
+    await api('/connections/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId,
+        webhookUrl: API + '/callback/whatsapp/' + deviceId,
+      }),
+    });
+    toast('Device reloaded');
+    loadDevices();
+    setTimeout(loadDevices, 3000);
+  } catch (e) { toast('Reload failed: ' + e.message, 'error'); }
+}
+
+// ── Message Actions ──
+function setReplyFrom(event) {
+  event.stopPropagation();
+  const data = JSON.parse(event.currentTarget.getAttribute('data-msg'));
+  const parent = event.currentTarget.closest('.msg');
+  replyTarget = data.jid + '-' + data.id;
+  $('replyPreview').style.display = 'flex';
+  const text = parent?.querySelector('.msg-text')?.textContent || '(media)';
+  $('replyName').textContent = data.fromMe ? 'You' : 'Them';
+  $('replyText').textContent = text.substring(0, 60);
+  $('msgInput').focus();
+}
+
+async function deleteMsg(event) {
+  event.stopPropagation();
+  const key = event.currentTarget.getAttribute('data-key');
+  if (!key || !confirm('Hapus pesan ini untuk semua orang?')) return;
+  try {
+    const idx = key.lastIndexOf('-');
+    const jid = key.slice(0, idx);
+    const id = key.slice(idx + 1);
+    await api('/messages/delete/' + currentDevice, {
+      method: 'POST',
+      body: JSON.stringify({ jid, messageId: id }),
+    });
+    toast('Pesan dihapus');
+    fetchMessages();
+  } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+}
+
+async function forwardMsg(event) {
+  event.stopPropagation();
+  const key = event.currentTarget.getAttribute('data-key');
+  const target = prompt('Masukkan JID tujuan (contoh: 62812xxx@s.whatsapp.net):');
+  if (!target || !key) return;
+  try {
+    await api('/messages/forward/' + currentDevice, {
+      method: 'POST',
+      body: JSON.stringify({ targetJid: target, messageKey: key }),
+    });
+    toast('Pesan diteruskan');
+  } catch (e) { toast('Gagal: ' + e.message, 'error'); }
+}
+
+async function deleteDevice(deviceId) {
+  if (!confirm('Delete device ' + deviceId.substring(0, 8) + '...? This will logout and remove all session data.')) return;
+  try {
+    await api('/connections/logout', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId }),
+    });
+    toast('Device deleted');
+    loadDevices();
+  } catch (e) { toast('Delete failed: ' + e.message, 'error'); }
+}
+function fmtDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 86400000 && d.getDate() === now.getDate()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diff < 172800000) return 'Yesterday';
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+function fmtFullDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+function getPushName(msg) {
+  if (!msg) return null;
+  return msg.pushName || null;
+}
+function formatJid(jid) {
+  if (!jid) return 'Unknown';
+  const name = jid.split('@')[0];
+  if (name.startsWith('62')) return '0' + name.slice(2);
+  if (name.startsWith('12036')) return name.slice(0, 6) + '...' + name.slice(-4);
+  return name;
+}
+function bestName(chat) {
+  if (chat?.name) return chat.name;
+  const pushName = getPushName(chat?.lastMessage);
+  if (pushName) return pushName;
+  return formatJid(chat?.jid);
+}
+function getChatName(jid, contact) {
+  if (contact?.name) return contact.name;
+  const name = jid.split('@')[0];
+  return name.startsWith('62') ? '0' + name.slice(2) : name;
+}
+function getMsgContent(msg) {
+  if (!msg?.message) return { text: '[Media message]', type: 'text' };
+  const m = msg.message;
+  if (m.conversation) return { text: m.conversation, type: 'text' };
+  if (m.extendedTextMessage?.text) return { text: m.extendedTextMessage.text, type: 'text' };
+  if (m.imageMessage) return { text: m.imageMessage.caption || '📷 Image', type: 'image', obj: m.imageMessage };
+  if (m.videoMessage) return { text: m.videoMessage.caption || '🎬 Video', type: 'video', obj: m.videoMessage };
+  if (m.audioMessage) return { text: '🎵 Audio', type: 'audio', obj: m.audioMessage };
+  if (m.documentMessage) return { text: m.documentMessage.fileName || '📄 Document', type: 'document', obj: m.documentMessage };
+  if (m.stickerMessage) return { text: 'Sticker', type: 'sticker', obj: m.stickerMessage };
+  return { text: '[Media message]', type: 'unknown' };
+}
+function getMsgId(msg) {
+  return msg.key?.id || '';
+}
+function getMsgRemoteJid(msg) {
+  return msg.key?.remoteJid || '';
+}
+
+// ── API ──
+async function api(url, opts = {}) {
+  const headers = { 'Accept': 'application/json' };
+  if (!(opts.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(API + url, { ...opts, headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('json') ? res.json() : res;
+}
+
+// ── Load Devices ──
+async function loadDevices() {
+  try {
+    const d = await api('/connections');
+    devices = d.data || [];
+    renderDeviceList();
+  } catch (e) { toast('Failed to load devices: ' + e.message, 'error'); }
+}
+
+function renderDeviceList() {
+  const cards = $('chatList');
+  cards.innerHTML = devices.map(dev => {
+    const status = dev.currentStatus?.isLoggedIn ? 'ONLINE' : dev.status;
+    const statusDot = status === 'open' || status === 'ONLINE' ? '🟢' : status === 'connecting' ? '🟡' : '🔴';
+    const isOnline = status === 'open' || status === 'ONLINE';
+    const isConnecting = status === 'connecting';
+    return `<div class="chat-item" onclick="selectDevice('${dev.id}')">
+      <div class="chat-avatar" style="background:#8696a0">${esc(dev.name?.[0] || '?')}</div>
+      <div class="chat-info">
+        <div class="chat-name">${esc(dev.name || dev.id)}</div>
+        <div class="chat-preview">${statusDot} ${status}</div>
+      </div>
+      <div class="device-actions" onclick="event.stopPropagation()">
+        ${!isOnline && !isConnecting ? `<button onclick="quickStart('${dev.id}')" title="Start"><i class="bi bi-play-fill"></i></button>` : ''}
+        ${isOnline || isConnecting ? `<button onclick="quickStop('${dev.id}')" title="Stop"><i class="bi bi-stop-fill"></i></button>` : ''}
+        ${isOnline || isConnecting ? `<button onclick="showQr('${dev.id}')" title="QR"><i class="bi bi-qr-code"></i></button>` : ''}
+        <button onclick="reloadDevice('${dev.id}')" title="Reload"><i class="bi bi-arrow-clockwise"></i></button>
+        <button onclick="deleteDevice('${dev.id}')" title="Delete" class="danger"><i class="bi bi-trash3"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+  if (!devices.length) cards.innerHTML = '<div class="empty-state"><p>No devices. Add one to start.</p></div>';
+}
+
+// ── Select Device & Load Chats ──
+async function selectDevice(id) {
+  currentDevice = id;
+  currentJid = null;
+  $('chatView').style.display = 'none';
+  $('emptyState').style.display = 'flex';
+  disconnectLiveSse();
+  loadChats();
+}
+
+async function loadChats() {
+  if (!currentDevice) return;
+  try {
+    const d = await api('/contacts/' + currentDevice);
+    chats = d.data || [];
+    renderChats();
+    subscribeLiveSse();
+  } catch (e) { toast('Failed to load chats: ' + e.message, 'error'); }
+}
+
+function renderChats() {
+  const el = $('chatList');
+  const dev = devices.find(d => d.id === currentDevice);
+  let html = `<div class="chat-item" onclick="showDevices()">
+    <div class="chat-avatar" style="background:#8696a0"><i class="bi bi-arrow-left"></i></div>
+    <div class="chat-info">
+      <div class="chat-name">${esc(dev?.name || currentDevice)}</div>
+      <div class="chat-preview">🟢 Back to devices</div>
+    </div>
+  </div>`;
+  html += chats.map(c => {
+    const uc = c.unreadCount || 0;
+    const name = bestName(c);
+    return `<div class="chat-item${c.jid === currentJid ? ' active' : ''}" data-jid="${esc(c.jid)}" data-name="${esc(name.toLowerCase())}" onclick="selectChat('${c.jid}')">
+      <div class="chat-avatar">${esc(name[0] || '?')}${uc > 0 ? `<span class="chat-unread">${uc > 99 ? '99+' : uc}</span>` : ''}</div>
+      <div class="chat-info">
+        <div class="chat-meta">
+          <div class="chat-name">${esc(name)}</div>
+          <div class="chat-time">${fmtDate(c.lastTimestamp)}</div>
+        </div>
+        <div class="chat-preview">${esc(getMsgContent(c.lastMessage).text.substring(0, 40))}</div>
+      </div>
+    </div>`;
+  }).join('');
+  if (!chats.length && !devices.length) html += '<div class="empty-state"><p>No chats yet</p></div>';
+  el.innerHTML = html;
+  document.querySelectorAll('.chat-item').forEach(el => {
+    const jid = el.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+    if (jid === currentJid) el.classList.add('active');
+  });
+}
+
+// ── Select Chat ──
+async function selectChat(jid) {
+  currentJid = jid;
+  msgOffset = 0;
+  allMessages = [];
+  $('chatView').style.display = 'flex';
+  $('emptyState').style.display = 'none';
+  cancelReply();
+
+  const chat = chats.find(c => c.jid === jid);
+  const isGroup = jid.endsWith('@g.us');
+  $('chatAvatar').textContent = (chat?.name || (isGroup ? '#' : '?'))[0];
+  $('chatName').textContent = chat?.name || (isGroup ? 'Group' : jid.split('@')[0]);
+  $('chatStatus').textContent = 'online';
+
+  // mark as read
+  try { await api('/messages/read/' + currentDevice + '/' + encodeURIComponent(jid), { method: 'POST' }); } catch {}
+
+  renderChats();
+  await fetchMessages();
+}
+
+let loadingMessages = false;
+
+async function fetchMessages(loadMore = false) {
+  if (!currentDevice || !currentJid || loadingMessages) return;
+  loadingMessages = true;
+  try {
+    const limit = 50;
+    const d = await api('/messages/' + currentDevice + '/' + encodeURIComponent(currentJid) + '?limit=' + limit + '&offset=' + (loadMore ? msgOffset : 0));
+    const msgs = d.data || [];
+    if (loadMore) {
+      allMessages = [...msgs, ...allMessages];
+      msgOffset += msgs.length;
+      renderMessages(allMessages, true);
+    } else {
+      allMessages = msgs;
+      msgOffset = msgs.length;
+      renderMessages(msgs, false);
+    }
+  } catch (e) { console.error('fetchMessages error:', e); }
+  loadingMessages = false;
+}
+
+function getMsgContentFromObj(m) {
+  const r = getMsgContent(m);
+  if (m.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+    r.quoted = m.message.extendedTextMessage.contextInfo;
+  }
+  return r;
+}
+
+function renderMessages(msgs, keepScroll = false) {
+  const el = $('messagesArea');
+  const prevHeight = keepScroll ? el.scrollHeight : 0;
+  if (!msgs.length) {
+    el.innerHTML = '<div class="empty-state"><p>No messages</p></div>';
+    return;
+  }
+  const sorted = [...msgs].sort((a, b) => (a.messageTimestamp || 0) - (b.messageTimestamp || 0));
+  let html = '', lastDate = '';
+  if (msgOffset >= 50) {
+    html += `<div class="load-more" onclick="fetchMessages(true)"><i class="bi bi-arrow-up"></i> Muat pesan sebelumnya</div>`;
+  }
+  for (const m of sorted) {
+    const isMe = m.key?.fromMe;
+    const content = getMsgContentFromObj(m);
+    const time = fmtDate(m.messageTimestamp);
+    const dateStr = fmtFullDate(m.messageTimestamp);
+    if (dateStr !== lastDate) {
+      html += `<div class="date-separator"><span>${dateStr}</span></div>`;
+      lastDate = dateStr;
+    }
+    html += `<div class="msg ${isMe ? 'outgoing' : 'incoming'}">`;
+    html += '<div class="msg-bubble">';
+    // forwarded label
+    const isFwd = m.message?.extendedTextMessage?.contextInfo?.isForwarded
+      || m.message?.extendedTextMessage?.contextInfo?.forwardingScore > 0
+      || m.message?.imageMessage?.contextInfo?.isForwarded
+      || m.message?.videoMessage?.contextInfo?.isForwarded
+      || m.message?.documentMessage?.contextInfo?.isForwarded;
+    // quoted reply
+    if (content.quoted) {
+      const q = content.quoted;
+      const qc = getMsgContent({ message: q.quotedMessage });
+      const qType = qc.type;
+      const qIcon = qType === 'image' ? '📷' : qType === 'video' ? '🎬' : qType === 'audio' ? '🎵' : qType === 'document' ? '📄' : qType === 'sticker' ? '🎨' : '';
+      html += `<div class="msg-reply"><div class="msg-reply-name">${isMe ? 'You' : 'Them'}</div>`;
+      html += esc(qIcon + ' ' + qc.text.substring(0, 80)) + '</div>';
+    }
+    if (isFwd) {
+      html += '<div class="msg-forwarded"><i class="bi bi-forward"></i> Forwarded</div>';
+    }
+    // media content
+    if (content.type === 'image') {
+      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
+      html += `<img class="msg-image" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" alt="image" onerror="mediaError(this)" onclick="showImage(this.src)">`;
+      if (content.text && !content.text.startsWith('📷')) html += `<div class="msg-text">${esc(content.text)}</div>`;
+    } else if (content.type === 'video') {
+      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
+      html += `<video class="msg-video" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" controls onerror="mediaError(this)"></video>`;
+      if (content.text && !content.text.startsWith('🎬')) html += `<div class="msg-text">${esc(content.text)}</div>`;
+    } else if (content.type === 'audio') {
+      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
+      html += `<audio class="msg-audio" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" controls onerror="mediaError(this)"></audio>`;
+    } else if (content.type === 'document') {
+      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
+      html += `<div class="msg-document" onclick="window.open('/messages/media/${currentDevice}/${encodeURIComponent(key)}')">
+        <i class="bi bi-file-earmark"></i>
+        <div class="msg-doc-info">
+          <div class="msg-doc-name">${esc(content.obj?.fileName || 'Document')}</div>
+          <div class="msg-doc-size">${content.obj?.fileSize ? Math.round(content.obj.fileSize / 1024) + ' KB' : ''}</div>
+        </div>
+      </div>`;
+    } else if (content.type === 'sticker') {
+      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
+      html += `<img class="msg-sticker" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" alt="sticker" onerror="this.style.display='none'">`;
+    } else {
+      html += `<div class="msg-text">${esc(content.text)}</div>`;
+    }
+    // footer
+    html += '<div class="msg-footer">';
+    html += `<span>${time}</span>`;
+    if (isMe) {
+      const status = m.status; // 1=sent, 2=delivered, 3=read
+      html += `<span class="msg-check ${status >= 2 ? '' : 'delivered'}"><i class="bi bi-check${status >= 2 ? '-all' : ''}"></i></span>`;
+    }
+    // message actions
+    const msgKey = getMsgRemoteJid(m) + '-' + getMsgId(m);
+    const msgData = esc(JSON.stringify({ id: m.key?.id, jid: m.key?.remoteJid, fromMe: isMe }));
+    html += `<div class="msg-actions">
+      <button data-msg='${msgData}' onclick="setReplyFrom(event)" title="Balas"><i class="bi bi-reply"></i></button>
+      ${isMe ? `<button data-key='${msgKey}' onclick="deleteMsg(event)" title="Hapus"><i class="bi bi-trash3"></i></button>` : ''}
+      <button data-key='${msgKey}' onclick="forwardMsg(event)" title="Teruskan"><i class="bi bi-forward"></i></button>
+    </div>`;
+    html += '</div></div></div>';
+  }
+  el.innerHTML = html;
+  if (keepScroll) {
+    el.scrollTop = el.scrollHeight - prevHeight;
+  } else {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+// ── Send Message ──
+function sendMsg() {
+  const input = $('msgInput');
+  const text = input.value.trim();
+  if (!text || !currentDevice || !currentJid) return;
+
+  if (replyTarget) {
+    api('/messages/send-reply', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: currentDevice,
+        recipient: currentJid,
+        message: text,
+        replyMessageKey: replyTarget
+      })
+    }).then(() => {
+      input.value = '';
+      cancelReply();
+      fetchMessages();
+      loadChats();
+    }).catch(e => toast('Reply failed: ' + e.message, 'error'));
+  } else {
+    api('/messages/send-text-message', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: currentDevice,
+        recipient: currentJid,
+        message: text,
+        sendPresence: true
+      })
+    }).then(() => {
+      input.value = '';
+      fetchMessages();
+      loadChats();
+    }).catch(e => toast('Send failed: ' + e.message, 'error'));
+  }
+}
+
+// ── Reply ──
+function setReply(msg) {
+  const content = getMsgContent(msg);
+  replyTarget = { id: msg.key.id, remoteJid: msg.key.remoteJid, fromMe: msg.key.fromMe };
+  $('replyPreview').style.display = 'flex';
+  $('replyName').textContent = msg.key.fromMe ? 'You' : 'Them';
+  $('replyText').textContent = content.text.substring(0, 60);
+  $('msgInput').focus();
+}
+
+function cancelReply() {
+  replyTarget = null;
+  $('replyPreview').style.display = 'none';
+}
+
+// ── Send Media ──
+function pickFile(accept) {
+  $('attachMenu').style.display = 'none';
+  const input = $('fileInput');
+  input.accept = accept;
+  input.click();
+}
+
+async function sendMedia(event) {
+  const file = event.target.files[0];
+  if (!file || !currentDevice || !currentJid) return;
+
+  const fd = new FormData();
+  fd.append('deviceId', currentDevice);
+  fd.append('recipient', currentJid);
+  fd.append('file', file);
+  if (replyTarget) fd.append('replyId', replyTarget.id);
+
+  try {
+    await api('/messages/send-media', { method: 'POST', body: fd });
+    cancelReply();
+    toast('Media sent');
+    fetchMessages();
+    loadChats();
+  } catch (e) { toast('Send media failed: ' + e.message, 'error'); }
+  event.target.value = '';
+}
+
+function toggleAttachMenu() {
+  const el = $('attachMenu');
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+// ── SSE Live ──
+let typingTimers = {};
+
+function subscribeLiveSse() {
+  disconnectLiveSse();
+  if (!currentDevice) return;
+
+  liveSse = new EventSource(API + '/sse/' + currentDevice + '/live');
+  liveSse.onmessage = (ev) => {
+    try {
+      const d = JSON.parse(ev.data);
+      if (d.type === 'new_message' || d.type === 'message_update') {
+        loadChats();
+        const jid = d.data?.key?.remoteJid;
+        if (jid === currentJid) fetchMessages();
+        // desktop notification untuk pesan baru dari chat lain
+        if (d.type === 'new_message' && jid && jid !== currentJid && Notification.permission === 'granted' && !d.data?.key?.fromMe) {
+          const chat = chats.find(c => c.jid === jid);
+          const name = chat ? bestName(chat) : formatJid(jid);
+          const content = getMsgContent(d.data).text.substring(0, 80);
+          new Notification(name, { body: content, icon: '/icon.ico' });
+        }
+      } else if (d.type === 'presence') {
+        const { jid, presence } = d.data;
+        if (jid === currentJid) {
+          const statusEl = $('chatStatus');
+          if (presence === 'composing' || presence === 'recording') {
+            const label = presence === 'recording' ? 'merekam...' : 'mengetik...';
+            statusEl.textContent = label;
+            statusEl.style.color = 'var(--accent)';
+            clearTimeout(typingTimers[jid]);
+            typingTimers[jid] = setTimeout(() => {
+              statusEl.textContent = 'online';
+              statusEl.style.color = '';
+            }, 3000);
+          } else if (presence === 'available') {
+            statusEl.textContent = 'online';
+            statusEl.style.color = '';
+          } else if (presence === 'unavailable') {
+            statusEl.textContent = 'offline';
+            statusEl.style.color = '';
+          }
+        }
+      }
+    } catch {}
+  };
+  liveSse.onerror = () => {};
+}
+
+function disconnectLiveSse() {
+  if (liveSse) { liveSse.close(); liveSse = null; }
+}
+
+// ── Device Dashboard Modal ──
+function showDeviceModal() {
+  // Simple device list - navigate back to device view
+  currentDevice = null;
+  currentJid = null;
+  $('chatView').style.display = 'none';
+  $('emptyState').style.display = 'flex';
+  disconnectLiveSse();
+  loadDevices();
+}
+
+function showDevices() {
+  currentDevice = null;
+  currentJid = null;
+  $('chatView').style.display = 'none';
+  $('emptyState').style.display = 'flex';
+  disconnectLiveSse();
+  loadDevices();
+}
+
+let searchDebounce;
+function filterChats() {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    const q = $('searchInput').value.toLowerCase().trim();
+    document.querySelectorAll('.chat-item').forEach(el => {
+      const name = el.getAttribute('data-name') || '';
+      const jid = el.getAttribute('data-jid') || '';
+      el.style.display = (!q || name.includes(q) || jid.includes(q)) ? 'flex' : 'none';
+    });
+  }, 300);
+}
+
+// ── Init ──
+if (Notification && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+loadDevices();
+setInterval(() => { if (currentJid) fetchMessages(); else if (currentDevice) loadChats(); }, 5000);
+</script>
+</body>
 </html>

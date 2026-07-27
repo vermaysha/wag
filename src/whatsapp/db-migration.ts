@@ -38,4 +38,27 @@ export const startDbMigration = (db: Database) => {
   db.run(
     `CREATE INDEX IF NOT EXISTS idx_groups_created_at ON groups(created_at);`,
   );
+
+  db.run(`CREATE TABLE IF NOT EXISTS contacts (
+    jid TEXT PRIMARY KEY,
+    name TEXT,
+    photo_url TEXT,
+    status TEXT,
+    last_seen INTEGER
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS chat_status (
+    chat_jid TEXT PRIMARY KEY,
+    last_read_message_key TEXT,
+    unread_count INTEGER DEFAULT 0,
+    updated_at INTEGER
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS media_cache (
+    message_key TEXT PRIMARY KEY,
+    file_path TEXT,
+    mime_type TEXT,
+    file_size INTEGER,
+    downloaded_at INTEGER
+  )`);
 };

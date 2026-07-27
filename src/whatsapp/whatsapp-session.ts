@@ -20,15 +20,17 @@ import { Database } from 'bun:sqlite';
 import { Cron } from 'croner';
 import { randomInt } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { createWriteStream } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import PQueue from 'p-queue';
 import P from 'pino';
+import { stringify } from 'qs';
 import { startDbMigration } from './db-migration';
-import { DatabaseQueries } from './db-queries';
+import { DatabaseQueries } from './queries';
 import { useSqliteAuthState } from './sqlite-auth-state';
 import { validatePhoneNumber } from './validate-phone-number';
 import { createWhatsAppLogger } from './whatsapp-logger';
-import { stringify } from 'qs';
+import { downloadContentFromMessage } from 'baileys/lib/Utils/messages-media';
 
 /**
  * Event map for WhatsAppSession
@@ -53,6 +55,25 @@ interface WhatsAppSessionEvents {
  * - 'error': (error: Error) - Error occurred
  */
 export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
+  private static sseClients = new Map<string, Set<(data: string) => void>>();
+
+  static subscribeSse(deviceId: string, callback: (data: string) => void): () => void {
+    if (!this.sseClients.has(deviceId)) {
+      this.sseClients.set(deviceId, new Set());
+    }
+    this.sseClients.get(deviceId)!.add(callback);
+    return () => this.sseClients.get(deviceId)?.delete(callback);
+  }
+
+  static emitToSse(deviceId: string, data: string): void {
+    const clients = this.sseClients.get(deviceId);
+    if (clients) {
+      for (const cb of clients) {
+        try { cb(data); } catch {}
+      }
+    }
+  }
+
   public readonly sessionId: string;
   public phoneNumber: string | null;
   public webhookUrl: string | null;
@@ -61,7 +82,8 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
   private db: Database | null = null;
   private dbQueries: DatabaseQueries | null = null;
   private dbDirectory: string;
-  private DEFAULT_TIMEOUT = 10;
+  public mediaDir: string;
+  private DEFAULT_TIMEOUT = 0;
 
   private socket: WASocket | null = null;
   private isLoggedIn: boolean = false;
@@ -75,6 +97,10 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
   private readonly RETRY_DELAY = 5_000;
   private webhookMutex = new Mutex();
   private pruneJob: Cron | null = null;
+
+  private dailyMessageCount: number = 0;
+  private dailyMessageDate: string = '';
+  private dailyMessageLimit: number = 0;
 
   private _connectionState: WAConnectionState = 'close';
   private _isNewSession: boolean = false;
@@ -103,6 +129,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     }
 
     this.dbDirectory = `${DB_PATH}/${this.sessionId}`;
+    this.mediaDir = `${this.dbDirectory}/media`;
     this.webhookUrl = webhookUrl;
   }
 
@@ -144,6 +171,13 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
    */
   getPairingCode(): string | null {
     return this.pairingCode;
+  }
+
+  /**
+   * Get database queries instance for message history
+   */
+  getDbQueries(): DatabaseQueries | null {
+    return this.dbQueries;
   }
 
   getConnectionState(): WAConnectionState {
@@ -272,59 +306,24 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('messages.upsert', async (upsert) => {
-          if (!!upsert.requestId) {
-            this.logger.info(
-              {
-                requestId: upsert.requestId,
-              },
-              'Placeholder message received',
-            );
-          }
-
           this.logger.info(
-            {
-              type: upsert.type,
-              count: upsert.messages.length,
-            },
+            { type: upsert.type, count: upsert.messages.length },
             'Messages upsert event',
           );
 
-          if (upsert.type === 'notify') {
-            for (const msg of upsert.messages) {
-              if (
-                msg.message?.conversation ||
-                msg.message?.extendedTextMessage?.text
-              ) {
-                const text =
-                  msg.message?.conversation ||
-                  msg.message?.extendedTextMessage?.text;
-                if (text == 'requestPlaceholder' && !upsert.requestId) {
-                  const messageId = await sock.requestPlaceholderResend(
-                    msg.key,
-                  );
-                  this.logger.info(
-                    { messageId },
-                    'Requested placeholder resync',
-                  );
-                }
+          for (const msg of upsert.messages) {
+            if (msg.key.id && msg.key.remoteJid) {
+              const messageKey = `${msg.key.remoteJid}-${msg.key.id}`;
+              dbQueries.upsertMessage(messageKey, msg);
 
-                // go to an old chat and send this
-                if (text == 'onDemandHistSync') {
-                  const messageId = await sock.fetchMessageHistory(
-                    50,
-                    msg.key,
-                    msg.messageTimestamp!,
-                  );
-                  this.logger.info({ messageId }, 'Requested on-demand sync');
-                }
+              if (!msg.key.fromMe) {
+                dbQueries.incrementUnread(msg.key.remoteJid);
               }
 
-              if (msg.key.id && msg.key.remoteJid) {
-                dbQueries.upsertMessage(
-                  `${msg.key.remoteJid}-${msg.key.id}`,
-                  msg,
-                );
-              }
+              WhatsAppSession.emitToSse(
+                this.sessionId,
+                JSON.stringify({ type: 'new_message', data: msg }),
+              );
             }
           }
         });
@@ -336,9 +335,35 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
             if (msg.key.id && msg.key.remoteJid) {
               dbQueries.upsertMessage(
                 `${msg.key.remoteJid}-${msg.key.id}`,
-                msg.update,
+                msg,
+              );
+
+              WhatsAppSession.emitToSse(
+                this.sessionId,
+                JSON.stringify({ type: 'message_update', data: msg }),
               );
             }
+          }
+        });
+
+        sock.ev.on('contacts.upsert', (contacts) => {
+          for (const c of contacts) {
+            if (c.id) {
+              dbQueries.upsertContact(c.id, (c as any).name ?? (c as any).notify, (c as any).imgUrl);
+            }
+          }
+        });
+
+        sock.ev.on('presence.update', (update) => {
+          const presences = update.presences || {};
+          for (const [jid, presence] of Object.entries(presences)) {
+            WhatsAppSession.emitToSse(
+              this.sessionId,
+              JSON.stringify({
+                type: 'presence',
+                data: { jid, presence: presence.lastKnownPresence },
+              }),
+            );
           }
         });
 
@@ -353,9 +378,11 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           this.logger.info({ count: updates.length }, 'Groups update event');
 
           for (const group of updates) {
-            if (!group.id) continue; // skip if no id
+            if (!group.id) continue;
             const data = await sock.groupMetadata(group.id).catch(() => null);
-            dbQueries.upsertGroup(group.id, data);
+            if (data) {
+              dbQueries.upsertGroup(group.id, data);
+            }
           }
         });
 
@@ -451,8 +478,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
                   'WhatsApp service unavailable, reconnecting',
                 );
                 this.cleanup();
-                // this.emit('session-stopped', 'unavailableService');
-                this.emit('connection-close', statusCode);
                 this.sendWebhook('close', {
                   reason: 'WhatsApp Service is Unavailable, reconnecting...',
                   isRestart: true,
@@ -498,8 +523,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
                 }
                 this.cleanup();
 
-                // this.emit('session-stopped', 'connectionClosed');
-                this.emit('connection-close', statusCode);
                 this.sendWebhook('close', {
                   reason: 'Connection closed, reconnecting....',
                   isRestart: true,
@@ -518,8 +541,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
                 this.cleanup();
 
                 this.connect().catch((err) => this.emit('error', err));
-                // this.emit('session-stopped', 'connectionLost');
-                this.emit('connection-close', statusCode);
                 this.sendWebhook('close', {
                   reason: 'Connection Lost from Server, reconnecting...',
                   isRestart: true,
@@ -569,8 +590,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
                 this.db = null;
                 this._isNewSession = true;
                 clearTimeout(this.timeout);
-                // this.emit('session-stopped', 'restartRequired');
-                this.emit('connection-close', statusCode);
 
                 this.sendWebhook('close', {
                   reason: 'Restart Required, Restarting...',
@@ -624,8 +643,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
                   clearCreds();
                 }
                 this.cleanup(true);
-                // this.emit('session-stopped', 'timeout');
-                this.emit('connection-close', statusCode);
                 this.sendWebhook('close', {
                   reason: 'Process timeout reached.',
                   isRestart: false,
@@ -642,9 +659,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
                   'Unknown disconnect reason, reconnecting',
                 );
                 this.cleanup();
-                // clearCreds();
-                // this.emit('session-stopped', 'unknown');
-                this.emit('connection-close', statusCode ?? -1);
                 this.sendWebhook('close', {
                   reason: 'Unknown DisconnectReason, reconnecting...',
                   isRestart: true,
@@ -697,32 +711,34 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           }
         });
 
-        // Set timeout for inactivity
-        if (this.timeout) {
-          this.logger.info('Timeout already set');
-        } else {
-          this.logger.info(
-            {
-              timeoutMinutes: this.DEFAULT_TIMEOUT,
-            },
-            'Setting inactivity timeout',
-          );
-          this.timeout = setTimeout(
-            () => {
-              this.logger.info('No activity detected, exiting');
-              if (this.socket) {
-                this.socket.end(
-                  new Boom('Process timeout reached', { statusCode: 999 }),
-                );
-                this.socket = null;
-              }
-              this.isLoggedIn = false;
-              this.qrCode = null;
-              this.pairingCode = null;
-              this.logger.info('Process exited due to inactivity');
-            },
-            1000 * 60 * this.DEFAULT_TIMEOUT,
-          );
+        // Set timeout for inactivity — disabled for persistent server
+        if (this.DEFAULT_TIMEOUT > 0) {
+          if (this.timeout) {
+            this.logger.info('Timeout already set');
+          } else {
+            this.logger.info(
+              {
+                timeoutMinutes: this.DEFAULT_TIMEOUT,
+              },
+              'Setting inactivity timeout',
+            );
+            this.timeout = setTimeout(
+              () => {
+                this.logger.info('No activity detected, exiting');
+                if (this.socket) {
+                  this.socket.end(
+                    new Boom('Process timeout reached', { statusCode: 999 }),
+                  );
+                  this.socket = null;
+                }
+                this.isLoggedIn = false;
+                this.qrCode = null;
+                this.pairingCode = null;
+                this.logger.info('Process exited due to inactivity');
+              },
+              1000 * 60 * this.DEFAULT_TIMEOUT,
+            );
+          }
         }
       } catch (error) {
         this.logger.error({ error }, 'Error during connection');
@@ -778,7 +794,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
       });
       this.socket = null;
     }
-    this.cleanup();
+    this.cleanup(true);
   }
 
   /**
@@ -786,7 +802,14 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
    */
   async destroy(): Promise<void> {
     await this.disconnect();
-    await rm(this.dbDirectory, { force: true, recursive: true });
+    try {
+      await rm(this.dbDirectory, { force: true, recursive: true });
+    } catch (err) {
+      this.logger.error(
+        { err, dir: this.dbDirectory },
+        'Failed to remove session directory',
+      );
+    }
   }
 
   /**
@@ -804,9 +827,33 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     content: AnyMessageContent,
     options: MiscMessageGenerationOptions | undefined = undefined,
     sendPresence: boolean = false,
+    delay?: number,
+    dailyLimit?: number,
   ) {
+    // Daily message limit check
+    if (dailyLimit && dailyLimit > 0) {
+      const today = new Date().toISOString().split('T')[0] ?? '';
+      if (this.dailyMessageDate !== today) {
+        this.dailyMessageDate = today;
+        this.dailyMessageCount = 0;
+      }
+      if (this.dailyMessageCount >= dailyLimit) {
+        this.logger.warn(
+          `[${this.sessionId}]: Daily message limit reached (${dailyLimit}) for jid: ${jid}`,
+        );
+        throw new Error(
+          `[${this.sessionId}] Daily message limit reached (${dailyLimit})`,
+        );
+      }
+      this.dailyMessageCount++;
+      this.logger.info(
+        `[${this.sessionId}]: Daily message count: ${this.dailyMessageCount}/${dailyLimit}`,
+      );
+    }
     const send = async () => {
-      this.logger.info(`[${this.sessionId}]: Sending message to jid: ${jid}, with id: ${id}`);
+      this.logger.info(
+        `[${this.sessionId}]: Sending message to jid: ${jid}, with id: ${id}`,
+      );
       if (!this.socket) {
         this.logger.error(
           `[${this.sessionId}]: Socket not connected, cannot send message to jid: ${jid}, with id: ${id}`,
@@ -838,7 +885,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
               'sendPresenceUpdate composing error',
             ),
           );
-        await Bun.sleep(randomInt(10, 15) * 100);
+        await Bun.sleep(randomInt(2, 5) * 1000);
         await this.socket
           .sendPresenceUpdate('paused', jid)
           .catch((r) =>
@@ -846,7 +893,10 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           );
         await Bun.sleep(randomInt(10, 15) * 100);
       } else {
-        await Bun.sleep(randomInt(10, 20) * 1000);
+        const sleepMs = Math.round(
+          (delay ?? 10) * 1000 * (0.8 + Math.random() * 0.4),
+        );
+        await Bun.sleep(sleepMs);
       }
 
       this.logger.info(
@@ -858,7 +908,10 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           throw new Error(`[${this.sessionId}] sendMessage error: ${r}`);
         });
 
-      await Bun.sleep(randomInt(10, 20) * 1000);
+      const afterSleepMs = Math.round(
+        (delay ?? 10) * 1000 * (0.8 + Math.random() * 0.4),
+      );
+      await Bun.sleep(afterSleepMs);
     };
 
     const sendWithRetry = async () => {
@@ -884,7 +937,9 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     this.messageQueue
       .add(sendWithRetry)
       .then(() => {
-        this.logger.info(`[${this.sessionId}]: Message sent successfully to jid: ${jid}, with id: ${id}`);
+        this.logger.info(
+          `[${this.sessionId}]: Message sent successfully to jid: ${jid}, with id: ${id}`,
+        );
         this.sendWebhook('message_sent', {
           id,
           deviceId: this.sessionId,
@@ -893,7 +948,10 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
         });
       })
       .catch((err) => {
-        this.logger.error({ err }, `[${this.sessionId}]: Error sending message to jid: ${jid}, with id: ${id} after ${this.MAX_RETRIES} attempts`);
+        this.logger.error(
+          { err },
+          `[${this.sessionId}]: Error sending message to jid: ${jid}, with id: ${id} after ${this.MAX_RETRIES} attempts`,
+        );
         this.sendWebhook('message_error', {
           id,
           deviceId: this.sessionId,
@@ -950,7 +1008,8 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             // 'User-Agent': `WAG-WhatsAppSession/${this.sessionId}`,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
             'X-Session-ID': this.sessionId,
             'X-Event': event,
             'X-Timestamp': new Date().toISOString(),
