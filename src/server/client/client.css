@@ -194,6 +194,9 @@ html, body {
   transition: background .1s, color .1s;
 }
 .msg-actions button:hover { background: var(--hover); color: var(--text); }
+
+/* ── Spinner ── */
+@keyframes spin { to { transform: rotate(360deg); } }
 .msg-reply {
   border-left: 3px solid var(--accent);
   padding-left: 8px; margin-bottom: 4px;

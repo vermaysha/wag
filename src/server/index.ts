@@ -13,6 +13,10 @@ import { contacts } from './contacts';
 import { logs } from './logs';
 import { messages } from './messages';
 import { liveSse } from './sse';
+import { SessionManager } from '@/whatsapp';
+import { totalmem, freemem, hostname, cpus, uptime as osUptime } from 'node:os';
+
+const startTime = Date.now();
 
 const app = new Elysia()
   .onRequest(({ request }) => {
@@ -137,6 +141,53 @@ const app = new Elysia()
       return file(icon);
     },
     { detail: { hide: true } },
+  )
+  .get(
+    '/system/info',
+    () => {
+      const mem = process.memoryUsage();
+      const sessions = SessionManager.getInstance().getAllSessions();
+
+      return {
+        success: true,
+        data: {
+          app: {
+            name: 'WAG',
+            version,
+            description: 'WhatsApp Multi-Session API Server Gateway',
+            uptime: Math.floor((Date.now() - startTime) / 1000),
+          },
+          runtime: {
+            bun: Bun.version,
+            arch: process.arch,
+            platform: process.platform,
+            pid: process.pid,
+          },
+          system: {
+            hostname: hostname(),
+            cpus: cpus().length,
+            memory: {
+              total: totalmem(),
+              free: freemem(),
+              used: totalmem() - freemem(),
+              process: mem.rss,
+              heap: mem.heapUsed,
+            },
+            os_uptime: Math.floor(osUptime()),
+          },
+          sessions: {
+            active: sessions.length,
+            total_in_db: SessionManager.getInstance().getAllSessionsFromDB().length,
+          },
+        },
+      };
+    },
+    {
+      detail: {
+        summary: 'System Info',
+        description: 'Get detailed system information about the WAG server.',
+      },
+    },
   )
   .listen(
     {

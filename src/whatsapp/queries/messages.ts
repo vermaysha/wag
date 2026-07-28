@@ -90,21 +90,25 @@ export class MessagesQueries {
   listChatJids(): Array<{ chatJid: string; lastMessage: unknown; count: number; lastTimestamp: number }> {
     let query;
     try {
+      // Single query: get stats + last message per chat using window function
       query = this.db.query(`
-        SELECT substr(key, 1, instr(key, '-') - 1) as chatJid, MAX(created_at) as lastTimestamp, COUNT(*) as count
-        FROM messages GROUP BY chatJid ORDER BY lastTimestamp DESC`);
-      const rows = query.all() as Array<{ chatJid: string; lastTimestamp: number; count: number }>;
-      return rows.map((row) => {
-        const lastMsgQuery = this.db.query('SELECT value FROM messages WHERE key LIKE $pattern ORDER BY created_at DESC LIMIT 1');
-        const lastMsg = lastMsgQuery.get({ $pattern: `${row.chatJid}-%` }) as { value: string } | undefined;
-        lastMsgQuery.finalize();
-        return {
-          chatJid: row.chatJid,
-          lastMessage: lastMsg?.value ? JSON.parse(lastMsg.value, BufferJSON.reviver) : null,
-          count: row.count,
-          lastTimestamp: row.lastTimestamp,
-        };
-      });
+        SELECT
+          substr(key, 1, instr(key, '-') - 1) as chatJid,
+          MAX(created_at) as lastTimestamp,
+          COUNT(*) as count,
+          (SELECT value FROM messages m2
+           WHERE substr(m2.key, 1, instr(m2.key, '-') - 1) = substr(messages.key, 1, instr(messages.key, '-') - 1)
+           ORDER BY m2.created_at DESC LIMIT 1) as lastMessage
+        FROM messages
+        GROUP BY chatJid
+        ORDER BY lastTimestamp DESC`);
+      const rows = query.all() as Array<{ chatJid: string; lastTimestamp: number; count: number; lastMessage: string | null }>;
+      return rows.map((row) => ({
+        chatJid: row.chatJid,
+        lastMessage: row.lastMessage ? JSON.parse(row.lastMessage, BufferJSON.reviver) : null,
+        count: row.count,
+        lastTimestamp: row.lastTimestamp,
+      }));
     } catch (error) {
       logger.error({ error }, '[DatabaseQueries] Error listing chat JIDs');
       throw error;

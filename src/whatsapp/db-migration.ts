@@ -36,6 +36,12 @@ export const startDbMigration = (db: Database) => {
     `CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);`,
   );
   db.run(
+    `CREATE INDEX IF NOT EXISTS idx_messages_key ON messages(key);`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_messages_chatjid ON messages(substr(key, 1, instr(key, '-') - 1), created_at DESC);`,
+  );
+  db.run(
     `CREATE INDEX IF NOT EXISTS idx_groups_created_at ON groups(created_at);`,
   );
 
