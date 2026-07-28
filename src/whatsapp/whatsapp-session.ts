@@ -97,6 +97,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
   private readonly RETRY_DELAY = 5_000;
   private webhookMutex = new Mutex();
   private pruneJob: Cron | null = null;
+  private onlineTimer: NodeJS.Timeout | null = null;
 
   private dailyMessageCount: number = 0;
   private dailyMessageDate: string = '';
@@ -200,6 +201,24 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     };
   }
 
+  private async setOnline(): Promise<void> {
+    if (!this.socket) return;
+    clearTimeout(this.onlineTimer!);
+    try {
+      await this.socket.sendPresenceUpdate('available');
+    } catch {}
+  }
+
+  private scheduleOffline(): void {
+    clearTimeout(this.onlineTimer!);
+    this.onlineTimer = setTimeout(async () => {
+      try {
+        await this.socket?.sendPresenceUpdate('unavailable');
+      } catch {}
+      this.onlineTimer = null;
+    }, 10000);
+  }
+
   /**
    * Connect to WhatsApp
    * @returns Promise that resolves when connection is established
@@ -264,6 +283,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, this.logger),
           },
+          browser: ['Windows', 'Edge', '120.0.0'],
           generateHighQualityLinkPreview: true,
           markOnlineOnConnect: false,
           syncFullHistory: false,
@@ -318,6 +338,9 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
 
               if (!msg.key.fromMe) {
                 dbQueries.incrementUnread(msg.key.remoteJid);
+                // incoming message → set online, reset offline timer
+                this.setOnline();
+                this.scheduleOffline();
               }
 
               WhatsAppSession.emitToSse(
@@ -708,6 +731,14 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           if (connection) {
             this._connectionState = connection;
             this.sendWebhook('state', connection);
+
+            WhatsAppSession.emitToSse(
+              this.sessionId,
+              JSON.stringify({
+                type: 'device_state',
+                data: { status: connection, isLoggedIn: this.isLoggedIn },
+              }),
+            );
           }
         });
 
@@ -827,7 +858,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     content: AnyMessageContent,
     options: MiscMessageGenerationOptions | undefined = undefined,
     sendPresence: boolean = false,
-    delay?: number,
+    delay: number = 60,
     dailyLimit?: number,
   ) {
     // Daily message limit check
@@ -893,10 +924,8 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           );
         await Bun.sleep(randomInt(10, 15) * 100);
       } else {
-        const sleepMs = Math.round(
-          (delay ?? 10) * 1000 * (0.8 + Math.random() * 0.4),
-        );
-        await Bun.sleep(sleepMs);
+        const jitter = (base: number) => Math.max(0, Math.round(base * 1000 + (Math.random() - 0.5) * 30000));
+        await Bun.sleep(jitter(delay));
       }
 
       this.logger.info(
@@ -908,17 +937,16 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           throw new Error(`[${this.sessionId}] sendMessage error: ${r}`);
         });
 
-      const afterSleepMs = Math.round(
-        (delay ?? 10) * 1000 * (0.8 + Math.random() * 0.4),
-      );
-      await Bun.sleep(afterSleepMs);
+      await Bun.sleep(Math.max(0, Math.round(delay * 1000 + (Math.random() - 0.5) * 30000)));
     };
 
     const sendWithRetry = async () => {
       let lastError: Error | null = null;
+      await this.setOnline();
       for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
         try {
           await send();
+          this.scheduleOffline();
           return;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
@@ -931,6 +959,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           }
         }
       }
+      this.scheduleOffline();
       throw lastError;
     };
 

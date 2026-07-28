@@ -1,11 +1,51 @@
 import { logger } from '@/logger';
 import { SessionManager } from '@/whatsapp/session-manager';
+import { DB_PATH } from '@/config';
 import { Elysia, t } from 'elysia';
 import { stringify } from 'qs';
+import { readdirSync, statSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const sessionManager = SessionManager.getInstance();
 const refreshGroupsRateLimit = new Map<string, number>();
 const REFRESH_GROUPS_COOLDOWN_MS = 60_000 * 5;
+
+function getDirSize(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  let size = 0;
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) size += getDirSize(full);
+      else if (entry.isFile()) {
+        try { size += statSync(full).size; } catch {}
+      }
+    }
+  } catch {}
+  return size;
+}
+
+// Cache dir sizes to avoid repeated filesystem walks
+const dirSizeCache = new Map<string, { bytes: number; at: number }>();
+const DIR_SIZE_CACHE_TTL = 30_000; // 30 seconds
+
+function getCachedDirSize(dir: string): number {
+  const now = Date.now();
+  const cached = dirSizeCache.get(dir);
+  if (cached && now - cached.at < DIR_SIZE_CACHE_TTL) {
+    return cached.bytes;
+  }
+  const bytes = getDirSize(dir);
+  dirSizeCache.set(dir, { bytes, at: now });
+  return bytes;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const connections = new Elysia({
   prefix: '/connections',
@@ -19,10 +59,21 @@ export const connections = new Elysia({
     '/',
     () => {
       const sessions = sessionManager.getAllSessionsFromDB();
+      const data = sessions.map((s: any) => {
+        const deviceDir = join(DB_PATH, s.id);
+        const bytes = getCachedDirSize(deviceDir);
+        return {
+          ...s,
+          storage: {
+            bytes,
+            formatted: formatSize(bytes),
+          },
+        };
+      });
       return {
         success: true,
-        data: sessions,
-        count: sessions.length,
+        data,
+        count: data.length,
       };
     },
     {

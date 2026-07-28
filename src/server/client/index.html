@@ -15,6 +15,7 @@
       <div class="sidebar-brand"><i class="bi bi-whatsapp"></i> WAG</div>
       <div class="sidebar-actions">
         <button class="icon-btn" onclick="showAddDeviceModal()" title="Add Device"><i class="bi bi-plus-lg"></i></button>
+        <button class="icon-btn" onclick="showAboutModal()" title="About"><i class="bi bi-info-circle"></i></button>
         <button class="icon-btn" onclick="showDeviceModal()" title="Devices"><i class="bi bi-phone"></i></button>
       </div>
     </div>
@@ -78,6 +79,17 @@
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="$('addDeviceModal').style.display='none'">Batal</button>
       <button class="btn btn-success" onclick="createDevice()">Tambah & Scan QR</button>
+    </div>
+  </div>
+</div>
+<div id="aboutModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this){this.style.display='none';if(window.aboutTimer)clearInterval(window.aboutTimer)}">
+  <div style="background:var(--panel-bg);border-radius:12px;padding:24px;width:460px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5);max-height:80vh;overflow-y:auto">
+    <h3 style="margin-bottom:16px;font-weight:600"><i class="bi bi-info-circle"></i> About WAG</h3>
+    <div id="aboutContent" style="font-size:13px;line-height:1.6">
+      <div style="text-align:center;padding:16px 0"><div class="spinner" style="width:24px;height:24px;border:3px solid var(--border);border-top:3px solid var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:auto"></div></div>
+    </div>
+    <div style="margin-top:16px;text-align:right">
+      <button class="btn btn-secondary" onclick="if(window.aboutTimer)clearInterval(window.aboutTimer);$('aboutModal').style.display='none'">Tutup</button>
     </div>
   </div>
 </div>
@@ -467,11 +479,12 @@ function renderDeviceList() {
     const statusDot = status === 'open' || status === 'ONLINE' ? '🟢' : status === 'connecting' ? '🟡' : '🔴';
     const isOnline = status === 'open' || status === 'ONLINE';
     const isConnecting = status === 'connecting';
+    const storage = dev.storage?.formatted || '';
     return `<div class="chat-item" onclick="selectDevice('${dev.id}')">
       <div class="chat-avatar" style="background:#8696a0">${esc(dev.name?.[0] || '?')}</div>
       <div class="chat-info">
         <div class="chat-name">${esc(dev.name || dev.id)}</div>
-        <div class="chat-preview">${statusDot} ${status}</div>
+        <div class="chat-preview">${statusDot} ${status}${storage ? ' · ' + storage : ''}</div>
       </div>
       <div class="device-actions" onclick="event.stopPropagation()">
         ${!isOnline && !isConnecting ? `<button onclick="quickStart('${dev.id}')" title="Start"><i class="bi bi-play-fill"></i></button>` : ''}
@@ -500,6 +513,14 @@ async function loadChats() {
   try {
     const d = await api('/contacts/' + currentDevice);
     chats = d.data || [];
+
+    // update device info with storage
+    const dev = devices.find(x => x.id === currentDevice);
+    if (dev?.storage?.formatted) {
+      const statusEl = $('emptyState');
+      statusEl.innerHTML = `<i class="bi bi-whatsapp"></i><p>${esc(dev.name)}</p><small style="color:var(--text-secondary)">${esc(dev.storage.formatted)}</small>`;
+    }
+
     renderChats();
     subscribeLiveSse();
   } catch (e) { toast('Failed to load chats: ' + e.message, 'error'); }
@@ -811,6 +832,15 @@ function subscribeLiveSse() {
             statusEl.style.color = '';
           }
         }
+      } else if (d.type === 'device_state') {
+        // update device list (status changes)
+        loadDevices();
+        // kalau lagi di chat view, update header status
+        const status = d.data?.status;
+        const statusDot = $('chatStatusDot');
+        if (statusDot) {
+          statusDot.className = 'status-dot ' + (status === 'open' ? 'online' : 'offline');
+        }
       }
     } catch {}
   };
@@ -819,6 +849,63 @@ function subscribeLiveSse() {
 
 function disconnectLiveSse() {
   if (liveSse) { liveSse.close(); liveSse = null; }
+}
+
+// ── About Modal ──
+async function showAboutModal() {
+  $('aboutModal').style.display = 'flex';
+  const el = $('aboutContent');
+
+  try {
+    const d = await api('/system/info');
+    const info = d.data;
+
+    const fmt = function(n) { if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; };
+    const fmtTime = function(s) { const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60; return (h ? h+'h ' : '') + (m ? m+'m ' : '') + sec + 's'; };
+
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+      <tr><td colspan="2" style="font-weight:600;padding:8px 0 4px;border-bottom:1px solid var(--border);color:var(--accent)">📦 Aplikasi</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Nama</td><td style="padding:4px 8px">${esc(info.app.name)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Versi</td><td style="padding:4px 8px">${esc(info.app.version)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Deskripsi</td><td style="padding:4px 8px">${esc(info.app.description)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Uptime</td><td style="padding:4px 8px">${fmtTime(info.app.uptime)}</td></tr>
+
+      <tr><td colspan="2" style="font-weight:600;padding:8px 0 4px;border-bottom:1px solid var(--border);color:var(--accent)">⚙️ Runtime</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Bun</td><td style="padding:4px 8px">${esc(info.runtime.bun)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Platform</td><td style="padding:4px 8px">${esc(info.runtime.platform + ' ' + info.runtime.arch)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">PID</td><td style="padding:4px 8px">${info.runtime.pid}</td></tr>
+
+      <tr><td colspan="2" style="font-weight:600;padding:8px 0 4px;border-bottom:1px solid var(--border);color:var(--accent)">🖥️ Sistem</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Hostname</td><td style="padding:4px 8px">${esc(info.system.hostname)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">CPU</td><td style="padding:4px 8px">${info.system.cpus} core</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">RAM Total</td><td style="padding:4px 8px">${fmt(info.system.memory.total)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">RAM Terpakai</td><td style="padding:4px 8px">${fmt(info.system.memory.used)} (${Math.round(info.system.memory.used / info.system.memory.total * 100)}%)</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">RAM Proses</td><td style="padding:4px 8px">${fmt(info.system.memory.process)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Heap</td><td style="padding:4px 8px">${fmt(info.system.memory.heap)}</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">OS Uptime</td><td style="padding:4px 8px">${fmtTime(info.system.os_uptime)}</td></tr>
+
+      <tr><td colspan="2" style="font-weight:600;padding:8px 0 4px;border-bottom:1px solid var(--border);color:var(--accent)">📡 Sesi</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--text-secondary)">Aktif</td><td style="padding:4px 8px">${info.sessions.active} / ${info.sessions.total_in_db}</td></tr>
+    </table>`;
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--danger);padding:16px;text-align:center">Gagal memuat info: ' + esc(e.message) + '</div>';
+  }
+
+  // polling live update tiap 5 detik
+  if (window.aboutTimer) clearInterval(window.aboutTimer);
+  window.aboutTimer = setInterval(async () => {
+    try {
+      const d = await api('/system/info');
+      const info = d.data;
+      // update field yang berubah (uptime, memory, sessions)
+      const rows = el.querySelectorAll('tr');
+      if (rows.length >= 4) rows[4].querySelectorAll('td')[1].textContent = fmtTime(info.app.uptime); // app uptime
+      if (rows.length >= 12) rows[12].querySelectorAll('td')[1].textContent = fmt(info.system.memory.process); // ram proses
+      if (rows.length >= 13) rows[13].querySelectorAll('td')[1].textContent = fmt(info.system.memory.heap); // heap
+      if (rows.length >= 14) rows[14].querySelectorAll('td')[1].textContent = fmtTime(info.system.os_uptime); // os uptime
+      if (rows.length >= 16) rows[16].querySelectorAll('td')[1].textContent = info.sessions.active + ' / ' + info.sessions.total_in_db; // sessions
+    } catch {}
+  }, 5000);
 }
 
 // ── Device Dashboard Modal ──
@@ -859,7 +946,8 @@ if (Notification && Notification.permission === 'default') {
   Notification.requestPermission();
 }
 loadDevices();
-setInterval(() => { if (currentJid) fetchMessages(); else if (currentDevice) loadChats(); }, 5000);
+// polling perangkat tiap 10 detik (saat tidak ada device terpilih)
+setInterval(() => { if (!currentDevice) loadDevices(); }, 10000);
 </script>
 </body>
 </html>
