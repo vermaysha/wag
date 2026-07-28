@@ -336,12 +336,13 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
               const messageKey = `${msg.key.remoteJid}-${msg.key.id}`;
               dbQueries.upsertMessage(messageKey, msg);
 
-              if (!msg.key.fromMe) {
-                dbQueries.incrementUnread(msg.key.remoteJid);
-                // incoming message → set online, reset offline timer
-                this.setOnline();
-                this.scheduleOffline();
-              }
+              // NOTE: NO NEED TO INCREMENT UNREAD COUNT OR SET ONLINE/OFFLINE TIMER HERE
+              // if (!msg.key.fromMe) {
+              //   dbQueries.incrementUnread(msg.key.remoteJid);
+              //   // incoming message → set online, reset offline timer
+              //   this.setOnline();
+              //   this.scheduleOffline();
+              // }
 
               WhatsAppSession.emitToSse(
                 this.sessionId,
