@@ -1,7 +1,9 @@
 import { logger } from '@/logger';
+import { SessionManager } from '@/whatsapp';
 import { openapi } from '@elysiajs/openapi';
 import { file } from 'bun';
 import { Elysia, t } from 'elysia';
+import { cpus, freemem, hostname, uptime as osUptime, totalmem } from 'node:os';
 import { version } from 'package.json';
 import { stringify } from 'qs';
 import icon from '../../assets/icon.ico' with { type: 'file' };
@@ -13,8 +15,6 @@ import { contacts } from './contacts';
 import { logs } from './logs';
 import { messages } from './messages';
 import { liveSse } from './sse';
-import { SessionManager } from '@/whatsapp';
-import { totalmem, freemem, hostname, cpus, uptime as osUptime } from 'node:os';
 
 const startTime = Date.now();
 
@@ -177,7 +177,8 @@ const app = new Elysia()
           },
           sessions: {
             active: sessions.length,
-            total_in_db: SessionManager.getInstance().getAllSessionsFromDB().length,
+            total_in_db:
+              SessionManager.getInstance().getAllSessionsFromDB().length,
           },
         },
       };

@@ -4,7 +4,11 @@ import { Database } from 'bun:sqlite';
 export class ContactsQueries {
   constructor(private db: Database) {}
 
-  upsertContact(jid: string, name?: string | null, photoUrl?: string | null): void {
+  upsertContact(
+    jid: string,
+    name?: string | null,
+    photoUrl?: string | null,
+  ): void {
     let query;
     try {
       query = this.db.query(
@@ -19,10 +23,15 @@ export class ContactsQueries {
     }
   }
 
-  getContact(jid: string): { jid: string; name: string | null; photo_url: string | null } | undefined {
+  getContact(
+    jid: string,
+  ):
+    { jid: string; name: string | null; photo_url: string | null } | undefined {
     let query;
     try {
-      query = this.db.query('SELECT jid, name, photo_url FROM contacts WHERE jid = $jid');
+      query = this.db.query(
+        'SELECT jid, name, photo_url FROM contacts WHERE jid = $jid',
+      );
       return query.get({ $jid: jid }) as any;
     } catch {
       return undefined;

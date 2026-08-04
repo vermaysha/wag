@@ -46,16 +46,8 @@
         <span class="reply-close" onclick="cancelReply()">&times;</span>
       </div>
       <div class="input-area" style="position:relative">
-        <button class="icon-btn" onclick="toggleAttachMenu()"><i class="bi bi-paperclip"></i></button>
         <input id="msgInput" placeholder="Type a message" onkeydown="if(event.key==='Enter')sendMsg()">
         <button class="icon-btn primary" onclick="sendMsg()"><i class="bi bi-send"></i></button>
-        <div class="attach-menu" id="attachMenu" style="display:none">
-          <div class="attach-item" onclick="pickFile('image/*')"><i style="background:#ef5350"><i class="bi bi-image"></i></i><span>Image</span></div>
-          <div class="attach-item" onclick="pickFile('audio/*')"><i style="background:#ff9800"><i class="bi bi-music-note"></i></i><span>Audio</span></div>
-          <div class="attach-item" onclick="pickFile('video/*')"><i style="background:#4caf50"><i class="bi bi-camera-reels"></i></i><span>Video</span></div>
-          <div class="attach-item" onclick="pickFile('*/*')"><i style="background:#2196f3"><i class="bi bi-file-earmark"></i></i><span>Document</span></div>
-        </div>
-        <input type="file" id="fileInput" style="display:none" onchange="sendMedia(event)">
       </div>
     </div>
     <div class="empty-state" id="emptyState">
@@ -65,10 +57,7 @@
   </main>
 </div>
 <div class="toast-container" id="toastContainer"></div>
-<div id="imageModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.85);cursor:zoom-out;align-items:center;justify-content:center" onclick="this.style.display='none'">
-  <img id="modalImage" style="max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain">
-</div>
-    <div id="addDeviceModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+<div id="addDeviceModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:var(--panel-bg);border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5)">
     <h3 style="margin-bottom:16px;font-weight:600">Tambah Device Baru</h3>
     <input id="newDeviceName" placeholder="Nama device (contoh: HP Sales)" style="width:100%;padding:10px 14px;border:none;border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;outline:none;margin-bottom:10px">
@@ -109,17 +98,6 @@ function toast(msg, type = 'success') {
   t.textContent = msg;
   $('toastContainer').appendChild(t);
   setTimeout(() => t.remove(), 3000);
-}
-function showImage(src) {
-  $('modalImage').src = src;
-  $('imageModal').style.display = 'flex';
-}
-function mediaError(el) {
-  el.style.display = 'none';
-  const div = document.createElement('div');
-  div.style.cssText = 'padding:8px;color:var(--text-secondary);font-style:italic;font-size:12px';
-  div.textContent = 'Media tidak tersedia';
-  el.parentElement.appendChild(div);
 }
 
 // ── Add Device Modal ──
@@ -537,10 +515,9 @@ function renderChats() {
     </div>
   </div>`;
   html += chats.map(c => {
-    const uc = c.unreadCount || 0;
     const name = bestName(c);
     return `<div class="chat-item${c.jid === currentJid ? ' active' : ''}" data-jid="${esc(c.jid)}" data-name="${esc(name.toLowerCase())}" onclick="selectChat('${c.jid}')">
-      <div class="chat-avatar">${esc(name[0] || '?')}${uc > 0 ? `<span class="chat-unread">${uc > 99 ? '99+' : uc}</span>` : ''}</div>
+      <div class="chat-avatar">${esc(name[0] || '?')}</div>
       <div class="chat-info">
         <div class="chat-meta">
           <div class="chat-name">${esc(name)}</div>
@@ -651,33 +628,8 @@ function renderMessages(msgs, keepScroll = false) {
     if (isFwd) {
       html += '<div class="msg-forwarded"><i class="bi bi-forward"></i> Forwarded</div>';
     }
-    // media content
-    if (content.type === 'image') {
-      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
-      html += `<img class="msg-image" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" alt="image" onerror="mediaError(this)" onclick="showImage(this.src)">`;
-      if (content.text && !content.text.startsWith('📷')) html += `<div class="msg-text">${esc(content.text)}</div>`;
-    } else if (content.type === 'video') {
-      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
-      html += `<video class="msg-video" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" controls onerror="mediaError(this)"></video>`;
-      if (content.text && !content.text.startsWith('🎬')) html += `<div class="msg-text">${esc(content.text)}</div>`;
-    } else if (content.type === 'audio') {
-      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
-      html += `<audio class="msg-audio" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" controls onerror="mediaError(this)"></audio>`;
-    } else if (content.type === 'document') {
-      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
-      html += `<div class="msg-document" onclick="window.open('/messages/media/${currentDevice}/${encodeURIComponent(key)}')">
-        <i class="bi bi-file-earmark"></i>
-        <div class="msg-doc-info">
-          <div class="msg-doc-name">${esc(content.obj?.fileName || 'Document')}</div>
-          <div class="msg-doc-size">${content.obj?.fileSize ? Math.round(content.obj.fileSize / 1024) + ' KB' : ''}</div>
-        </div>
-      </div>`;
-    } else if (content.type === 'sticker') {
-      const key = getMsgRemoteJid(m) + '-' + getMsgId(m);
-      html += `<img class="msg-sticker" src="/messages/media/${currentDevice}/${encodeURIComponent(key)}" alt="sticker" onerror="this.style.display='none'">`;
-    } else {
-      html += `<div class="msg-text">${esc(content.text)}</div>`;
-    }
+    // message content (media no longer supported)
+    html += `<div class="msg-text">${esc(content.text)}</div>`;
     // footer
     html += '<div class="msg-footer">';
     html += `<span>${time}</span>`;
@@ -754,39 +706,6 @@ function setReply(msg) {
 function cancelReply() {
   replyTarget = null;
   $('replyPreview').style.display = 'none';
-}
-
-// ── Send Media ──
-function pickFile(accept) {
-  $('attachMenu').style.display = 'none';
-  const input = $('fileInput');
-  input.accept = accept;
-  input.click();
-}
-
-async function sendMedia(event) {
-  const file = event.target.files[0];
-  if (!file || !currentDevice || !currentJid) return;
-
-  const fd = new FormData();
-  fd.append('deviceId', currentDevice);
-  fd.append('recipient', currentJid);
-  fd.append('file', file);
-  if (replyTarget) fd.append('replyId', replyTarget.id);
-
-  try {
-    await api('/messages/send-media', { method: 'POST', body: fd });
-    cancelReply();
-    toast('Media sent');
-    fetchMessages();
-    loadChats();
-  } catch (e) { toast('Send media failed: ' + e.message, 'error'); }
-  event.target.value = '';
-}
-
-function toggleAttachMenu() {
-  const el = $('attachMenu');
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
 }
 
 // ── SSE Live ──

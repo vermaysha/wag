@@ -7,6 +7,7 @@ export const startDbMigration = (db: Database) => {
   db.run('PRAGMA temp_store = MEMORY;');
   db.run('PRAGMA mmap_size = 33554432;');
   db.run('PRAGMA auto_vacuum = INCREMENTAL;');
+  db.run('PRAGMA busy_timeout = 5000;');
 
   if (Bun.env.NODE_ENV === 'production') {
     db.run('PRAGMA locking_mode = EXCLUSIVE;'); // Exclusive locking for single-writer scenarios
@@ -20,30 +21,11 @@ export const startDbMigration = (db: Database) => {
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS messages (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch())
-  )`);
-
   db.run(`CREATE TABLE IF NOT EXISTS groups (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`);
-
-  db.run(
-    `CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);`,
-  );
-  db.run(
-    `CREATE INDEX IF NOT EXISTS idx_messages_key ON messages(key);`,
-  );
-  db.run(
-    `CREATE INDEX IF NOT EXISTS idx_messages_chatjid ON messages(substr(key, 1, instr(key, '-') - 1), created_at DESC);`,
-  );
-  db.run(
-    `CREATE INDEX IF NOT EXISTS idx_groups_created_at ON groups(created_at);`,
-  );
 
   db.run(`CREATE TABLE IF NOT EXISTS contacts (
     jid TEXT PRIMARY KEY,
@@ -53,18 +35,8 @@ export const startDbMigration = (db: Database) => {
     last_seen INTEGER
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS chat_status (
-    chat_jid TEXT PRIMARY KEY,
-    last_read_message_key TEXT,
-    unread_count INTEGER DEFAULT 0,
-    updated_at INTEGER
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS media_cache (
-    message_key TEXT PRIMARY KEY,
-    file_path TEXT,
-    mime_type TEXT,
-    file_size INTEGER,
-    downloaded_at INTEGER
-  )`);
+  // Legacy tables from when messages were persisted — no longer used
+  db.run(`DROP TABLE IF EXISTS messages`);
+  db.run(`DROP TABLE IF EXISTS media_cache`);
+  db.run(`DROP TABLE IF EXISTS chat_status`);
 };

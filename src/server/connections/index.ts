@@ -1,10 +1,10 @@
+import { DB_PATH } from '@/config';
 import { logger } from '@/logger';
 import { SessionManager } from '@/whatsapp/session-manager';
-import { DB_PATH } from '@/config';
 import { Elysia, t } from 'elysia';
-import { stringify } from 'qs';
-import { readdirSync, statSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { stringify } from 'qs';
 
 const sessionManager = SessionManager.getInstance();
 const refreshGroupsRateLimit = new Map<string, number>();
@@ -19,7 +19,9 @@ function getDirSize(dir: string): number {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) size += getDirSize(full);
       else if (entry.isFile()) {
-        try { size += statSync(full).size; } catch {}
+        try {
+          size += statSync(full).size;
+        } catch {}
       }
     }
   } catch {}

@@ -17,20 +17,18 @@ import {
   type WASocket,
 } from 'baileys';
 import { Database } from 'bun:sqlite';
-import { Cron } from 'croner';
 import { randomInt } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { createWriteStream } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import PQueue from 'p-queue';
 import P from 'pino';
 import { stringify } from 'qs';
 import { startDbMigration } from './db-migration';
+import { messageStore } from './message-store';
 import { DatabaseQueries } from './queries';
 import { useSqliteAuthState } from './sqlite-auth-state';
 import { validatePhoneNumber } from './validate-phone-number';
 import { createWhatsAppLogger } from './whatsapp-logger';
-import { downloadContentFromMessage } from 'baileys/lib/Utils/messages-media';
 
 /**
  * Event map for WhatsAppSession
@@ -56,12 +54,21 @@ interface WhatsAppSessionEvents {
  */
 export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
   private static sseClients = new Map<string, Set<(data: string) => void>>();
+  private static readonly SSE_CLIENTS_PER_DEVICE = 50;
 
-  static subscribeSse(deviceId: string, callback: (data: string) => void): () => void {
+  static subscribeSse(
+    deviceId: string,
+    callback: (data: string) => void,
+  ): () => void {
     if (!this.sseClients.has(deviceId)) {
       this.sseClients.set(deviceId, new Set());
     }
-    this.sseClients.get(deviceId)!.add(callback);
+    const clients = this.sseClients.get(deviceId)!;
+    if (clients.size >= this.SSE_CLIENTS_PER_DEVICE) {
+      const oldest = clients.values().next().value;
+      if (oldest) clients.delete(oldest);
+    }
+    clients.add(callback);
     return () => this.sseClients.get(deviceId)?.delete(callback);
   }
 
@@ -69,7 +76,9 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     const clients = this.sseClients.get(deviceId);
     if (clients) {
       for (const cb of clients) {
-        try { cb(data); } catch {}
+        try {
+          cb(data);
+        } catch {}
       }
     }
   }
@@ -82,7 +91,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
   private db: Database | null = null;
   private dbQueries: DatabaseQueries | null = null;
   private dbDirectory: string;
-  public mediaDir: string;
   private DEFAULT_TIMEOUT = 0;
 
   private socket: WASocket | null = null;
@@ -96,9 +104,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 5_000;
   private webhookMutex = new Mutex();
-  private pruneJob: Cron | null = null;
-  private onlineTimer: NodeJS.Timeout | null = null;
-
   private dailyMessageCount: number = 0;
   private dailyMessageDate: string = '';
   private dailyMessageLimit: number = 0;
@@ -130,7 +135,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     }
 
     this.dbDirectory = `${DB_PATH}/${this.sessionId}`;
-    this.mediaDir = `${this.dbDirectory}/media`;
     this.webhookUrl = webhookUrl;
   }
 
@@ -201,24 +205,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     };
   }
 
-  private async setOnline(): Promise<void> {
-    if (!this.socket) return;
-    clearTimeout(this.onlineTimer!);
-    try {
-      await this.socket.sendPresenceUpdate('available');
-    } catch {}
-  }
-
-  private scheduleOffline(): void {
-    clearTimeout(this.onlineTimer!);
-    this.onlineTimer = setTimeout(async () => {
-      try {
-        await this.socket?.sendPresenceUpdate('unavailable');
-      } catch {}
-      this.onlineTimer = null;
-    }, 10000);
-  }
-
   /**
    * Connect to WhatsApp
    * @returns Promise that resolves when connection is established
@@ -285,7 +271,7 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           },
           browser: ['Windows', 'Edge', '120.0.0'],
           generateHighQualityLinkPreview: true,
-          markOnlineOnConnect: false,
+          markOnlineOnConnect: true,
           syncFullHistory: false,
           shouldIgnoreJid: (jid) => {
             return (
@@ -310,7 +296,10 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
               'Fetching cached message',
             );
 
-            const obj = dbQueries.getMessage(`${key.remoteJid}-${key.id}`);
+            const obj = messageStore.get(
+              this.sessionId,
+              `${key.remoteJid}-${key.id}`,
+            );
             if (obj && typeof obj === 'object' && 'message' in obj) {
               return proto.Message.create(obj.message as any);
             }
@@ -332,39 +321,8 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           );
 
           for (const msg of upsert.messages) {
-            if (msg.key.id && msg.key.remoteJid) {
-              const messageKey = `${msg.key.remoteJid}-${msg.key.id}`;
-              dbQueries.upsertMessage(messageKey, msg);
-
-              if (!msg.key.fromMe) {
-                dbQueries.incrementUnread(msg.key.remoteJid);
-                // incoming message → set online, reset offline timer
-                this.setOnline();
-                this.scheduleOffline();
-              }
-
-              WhatsAppSession.emitToSse(
-                this.sessionId,
-                JSON.stringify({ type: 'new_message', data: msg }),
-              );
-            }
-          }
-        });
-
-        sock.ev.on('messages.update', (updates) => {
-          this.logger.info({ count: updates.length }, 'Messages update event');
-
-          for (const msg of updates) {
-            if (msg.key.id && msg.key.remoteJid) {
-              dbQueries.upsertMessage(
-                `${msg.key.remoteJid}-${msg.key.id}`,
-                msg,
-              );
-
-              WhatsAppSession.emitToSse(
-                this.sessionId,
-                JSON.stringify({ type: 'message_update', data: msg }),
-              );
+            if (msg.key.id && msg.key.remoteJid && msg.key.fromMe) {
+              messageStore.upsert(this.sessionId, msg);
             }
           }
         });
@@ -372,7 +330,11 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
         sock.ev.on('contacts.upsert', (contacts) => {
           for (const c of contacts) {
             if (c.id) {
-              dbQueries.upsertContact(c.id, (c as any).name ?? (c as any).notify, (c as any).imgUrl);
+              dbQueries.upsertContact(
+                c.id,
+                (c as any).name ?? (c as any).notify,
+                (c as any).imgUrl,
+              );
             }
           }
         });
@@ -433,7 +395,9 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           );
 
           for (const msg of messages) {
-            dbQueries.upsertMessage(`${msg.key.remoteJid}-${msg.key.id}`, msg);
+            if (msg.key?.fromMe) {
+              messageStore.upsert(this.sessionId, msg);
+            }
           }
         });
 
@@ -701,9 +665,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
             this.emit('authenticated', sock);
             this.sendWebhook('ready', {});
 
-            this.pruneJob = new Cron('0 0 * * *', () => {
-              this.pruneOldMessages(30);
-            });
             if (this._isNewSession) {
               sock.groupFetchAllParticipating().catch((err) => {
                 this.logger.error(
@@ -802,8 +763,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
     // this.db?.close();
     // this.db = null;
     this.dbQueries = null;
-    this.pruneJob?.stop();
-    this.pruneJob = null;
     this.messageQueue.clear();
     this._connectionState = 'close';
     clearInterval(this.heartbeatInterval);
@@ -924,7 +883,8 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           );
         await Bun.sleep(randomInt(10, 15) * 100);
       } else {
-        const jitter = (base: number) => Math.max(0, Math.round(base * 1000 + (Math.random() - 0.5) * 30000));
+        const jitter = (base: number) =>
+          Math.max(0, Math.round(base * 1000 + (Math.random() - 0.5) * 30000));
         await Bun.sleep(jitter(delay));
       }
 
@@ -937,16 +897,16 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           throw new Error(`[${this.sessionId}] sendMessage error: ${r}`);
         });
 
-      await Bun.sleep(Math.max(0, Math.round(delay * 1000 + (Math.random() - 0.5) * 30000)));
+      await Bun.sleep(
+        Math.max(0, Math.round(delay * 1000 + (Math.random() - 0.5) * 30000)),
+      );
     };
 
     const sendWithRetry = async () => {
       let lastError: Error | null = null;
-      await this.setOnline();
       for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
         try {
           await send();
-          this.scheduleOffline();
           return;
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
@@ -959,9 +919,15 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           }
         }
       }
-      this.scheduleOffline();
       throw lastError;
     };
+
+    const MAX_QUEUED = Number(Bun.env.SEND_QUEUE_MAX ?? 500);
+    if (this.messageQueue.size >= MAX_QUEUED) {
+      throw new Error(
+        `[${this.sessionId}] Send queue full (${MAX_QUEUED}), try again later`,
+      );
+    }
 
     this.messageQueue
       .add(sendWithRetry)
@@ -989,30 +955,6 @@ export class WhatsAppSession extends EventEmitter<WhatsAppSessionEvents> {
           error: err instanceof Error ? err.message : String(err),
         });
       });
-  }
-
-  /**
-   * Prune old messages from the database
-   * @param olderThanDays Number of days to keep messages. Messages older than this will be deleted. Default is 30 days.
-   */
-  pruneOldMessages(olderThanDays: number = 30): void {
-    if (!this.dbQueries) {
-      this.logger.warn('Database not initialized, cannot prune messages');
-      return;
-    }
-
-    const cutoffTimestamp = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
-    const cutoffSeconds = Math.floor(cutoffTimestamp / 1000);
-
-    const deletedCount = this.dbQueries.deleteOldMessages(cutoffSeconds);
-
-    this.logger.info(
-      {
-        deletedCount,
-        olderThanDays,
-      },
-      'Pruned old messages',
-    );
   }
 
   /**

@@ -7,7 +7,6 @@ const shutdown = async (signal: NodeJS.Signals) => {
   const sessions = SessionManager.getInstance().getAllSessions();
   for (const session of sessions) {
     logger.info(`Closing session ${session.sessionId}...`);
-    session.pruneOldMessages();
     await session.disconnect();
     logger.info(`Session ${session.sessionId} closed.`);
   }
