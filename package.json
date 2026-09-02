@@ -62,7 +62,7 @@
     "audio-decode": "^3.12.0",
     "baileys": "^7.0.0-rc14",
     "croner": "^10.0.1",
-    "elysia": "^1.4.29",
+    "elysia": "^1.4.30",
     "jimp": "^1.6.1",
     "libphonenumber-js": "^1.13.12",
     "link-preview-js": "^4.0.4",
