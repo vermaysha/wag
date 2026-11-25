@@ -68,7 +68,7 @@
     "link-preview-js": "^4.0.4",
     "qs": "^6.17.1",
     "readeof": "^1.1.0",
-    "rotating-file-stream": "^3.2.10"
+    "rotating-file-stream": "^4.0.0"
   },
   "trustedDependencies": [
     "baileys",
